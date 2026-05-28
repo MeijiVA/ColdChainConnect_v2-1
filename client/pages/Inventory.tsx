@@ -32,12 +32,6 @@ interface Batch {
   createdAt: string;
 }
 
-// localStorage keys
-const STORAGE_KEYS = {
-  BATCHES: "inventory_batches",
-  SELECTED_BATCH: "inventory_selected_batch",
-};
-
 export function Inventory() {
   const navigate = useNavigate();
   const [products, setProducts] = useState<InventoryProduct[]>([
@@ -151,53 +145,38 @@ export function Inventory() {
   const { batches, setBatches, selectedBatchId, setSelectedBatchId, searchQuery, setSearchQuery } = useInventoryContext();
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch products from API and merge into local state
-  useEffect(() => {
-    // Clear stale hardcoded batch data from localStorage on first load
-    const savedBatches = localStorage.getItem(STORAGE_KEYS.BATCHES);
-    if (savedBatches) {
-      try {
-        const parsed = JSON.parse(savedBatches);
-        // If batches contain hardcoded numeric IDs like "1","2" etc, clear them
-        const hasHardcodedIds = parsed.some((b: any) =>
-          b.items?.some((item: any) => ["1","2","3","4","5","6","7","8"].includes(item.productId))
-        );
-        if (hasHardcodedIds) {
-          localStorage.removeItem(STORAGE_KEYS.BATCHES);
-          localStorage.removeItem(STORAGE_KEYS.SELECTED_BATCH);
-        }
-      } catch {}
-    }
-
-    const fetchApiProducts = async () => {
-      try {
-        const token = localStorage.getItem("auth_token") || "";
-        const response = await fetch("/api/products", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (response.ok) {
-          const data = await response.json();
-          // Map API products to InventoryProduct shape
-          const mapped: InventoryProduct[] = data.map((p: any) => ({
-            id: p.id,
-            sku: p.sku || p.name,
-            description: p.name,
-            unitPrice: parseFloat(p.price) || 0,
-            supplierId: "",
-            weight: 0,
-            quantity: 0,
-            expiryDate: new Date().toISOString().split("T")[0],
-            imageFilename: p.image_filename,
-            reorderPoint: 0,
-            lastUpdated: p.updated_at || new Date().toISOString(),
-          }));
-          setProducts(mapped);
-        }
-      } catch (err) {
-        console.error("Failed to load products from API:", err);
+  const fetchProductsFromApi = async () => {
+    try {
+      const token = localStorage.getItem("auth_token") || "";
+      const response = await fetch("/api/products", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // Map API products to InventoryProduct shape
+        const mapped: InventoryProduct[] = data.map((p: any) => ({
+          id: p.id,
+          sku: p.sku || p.name,
+          description: p.name,
+          unitPrice: parseFloat(p.price) || 0,
+          supplierId: "",
+          weight: 0,
+          quantity: 0,
+          expiryDate: new Date().toISOString().split("T")[0],
+          imageFilename: p.image_filename,
+          reorderPoint: 0,
+          lastUpdated: p.updated_at || new Date().toISOString(),
+        }));
+        setProducts(mapped);
       }
-    };
-    fetchApiProducts();
+    } catch (err) {
+      console.error("Failed to load products from API:", err);
+    }
+  };
+
+  // Fetch products from API on mount
+  useEffect(() => {
+    fetchProductsFromApi();
   }, []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<InventoryProduct | null>(null);
@@ -223,62 +202,6 @@ export function Inventory() {
   });
 
   const itemsPerPage = 10;
-
-  // Initialize batches from localStorage on mount
-  useEffect(() => {
-    const savedBatches = localStorage.getItem(STORAGE_KEYS.BATCHES);
-    const savedSelectedBatch = localStorage.getItem(STORAGE_KEYS.SELECTED_BATCH);
-
-    // Always ensure "All Products" batch exists as first entry (dynamic, not stored)
-    const allProductsBatch: Batch = {
-      id: "batch-all",
-      name: "All Products",
-      items: [], // items are ignored for batch-all; getBatchProducts handles it dynamically
-      createdAt: new Date().toISOString(),
-    };
-
-    if (savedBatches) {
-      let parsedBatches = JSON.parse(savedBatches);
-      // Filter out any stale batch-all entries, we always add a fresh one
-      parsedBatches = parsedBatches.filter((b: any) => b.id !== "batch-all");
-      // Migrate old productIds structure if needed
-      parsedBatches = parsedBatches.map((batch: any) => {
-        if (batch.productIds && !batch.items) {
-          return {
-            ...batch,
-            items: batch.productIds.map((productId: string) => ({
-              productId,
-              quantity: 0,
-              expiryDate: new Date().toISOString().split("T")[0],
-            })),
-            productIds: undefined,
-          };
-        }
-        return batch;
-      });
-
-      const allBatches = [allProductsBatch, ...parsedBatches];
-      setBatches(allBatches);
-      setSelectedBatchId(savedSelectedBatch || "batch-all");
-    } else {
-      setBatches([allProductsBatch]);
-      setSelectedBatchId("batch-all");
-    }
-  }, []);
-
-  // Persist batches to localStorage whenever they change
-  useEffect(() => {
-    if (batches.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.BATCHES, JSON.stringify(batches));
-    }
-  }, [batches]);
-
-  // Persist selected batch to localStorage
-  useEffect(() => {
-    if (selectedBatchId) {
-      localStorage.setItem(STORAGE_KEYS.SELECTED_BATCH, selectedBatchId);
-    }
-  }, [selectedBatchId]);
 
   // Get current batch
   const currentBatch = batches.find((b) => b.id === selectedBatchId);
@@ -414,7 +337,7 @@ export function Inventory() {
   };
 
   // Product management functions
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (formData.unitPrice <= 0) {
       alert("Unit price must be a positive number");
       return;
@@ -428,41 +351,91 @@ export function Inventory() {
       return;
     }
 
-    if (selectedProduct) {
-      setProducts(
-        products.map((p) =>
-          p.id === selectedProduct.id
-            ? { ...formData, lastUpdated: new Date().toISOString().split("T")[0] }
-            : p
-        )
-      );
-    } else {
-      const newProduct = {
-        ...formData,
-        id: Date.now().toString(),
-        lastUpdated: new Date().toISOString().split("T")[0],
-      };
-      setProducts([...products, newProduct]);
-      // Add new product to current batch
-      if (currentBatch) {
-        addProductToBatch(newProduct.id);
-      }
-    }
+    try {
+      const token = localStorage.getItem("auth_token") || "";
 
-    resetForm();
-    setIsModalOpen(false);
+      if (selectedProduct) {
+        // Update existing product
+        const response = await fetch(`/api/products/${selectedProduct.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.description,
+            sku: formData.sku,
+            price: formData.unitPrice,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to update product");
+        }
+      } else {
+        // Create new product
+        const response = await fetch("/api/products", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.description,
+            sku: formData.sku,
+            price: formData.unitPrice,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create product");
+        }
+
+        const newProduct = await response.json();
+        // Add new product to current batch
+        if (currentBatch) {
+          addProductToBatch(newProduct.id);
+        }
+      }
+
+      // Refetch products from database
+      await fetchProductsFromApi();
+      resetForm();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("Failed to save product:", err);
+      alert("Failed to save product. Please try again.");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
-      setProducts(products.filter((p) => p.id !== id));
-      // Remove from all batches
-      setBatches(
-        batches.map((b) => ({
-          ...b,
-          items: b.items.filter((item) => item.productId !== id),
-        }))
-      );
+      try {
+        const token = localStorage.getItem("auth_token") || "";
+        const response = await fetch(`/api/products/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete product");
+        }
+
+        setProducts(products.filter((p) => p.id !== id));
+        // Remove from all batches
+        setBatches(
+          batches.map((b) => ({
+            ...b,
+            items: b.items.filter((item) => item.productId !== id),
+          }))
+        );
+
+        // Refetch products from database
+        await fetchProductsFromApi();
+      } catch (err) {
+        console.error("Failed to delete product:", err);
+        alert("Failed to delete product. Please try again.");
+      }
     }
   };
 
