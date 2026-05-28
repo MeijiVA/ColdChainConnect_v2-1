@@ -665,29 +665,21 @@ export function Inventory() {
                           className="border-b border-border hover:bg-off-white/50 transition-colors"
                         >
                           <td className="px-3 py-3 whitespace-nowrap">
-                            <div className="flex flex-col gap-1">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded text-xs font-bold badge-${
-                                  stockStatus.status === "critical"
-                                    ? "red"
-                                    : stockStatus.status === "warning"
-                                      ? "gold"
-                                      : "green"
-                                }`}
-                              >
-                                {stockStatus.label}
-                              </span>
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded text-xs font-bold badge-${
-                                  expiryStatus.status === "expired" ||
-                                  expiryStatus.status === "expiring"
-                                    ? "red"
-                                    : "blue"
-                                }`}
-                              >
-                                {expiryStatus.label}
-                              </span>
-                            </div>
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-bold badge-${
+                                expiryStatus.status === "expired"
+                                  ? "red"
+                                  : expiryStatus.status === "expiring"
+                                    ? "gold"
+                                    : "green"
+                              }`}
+                            >
+                              {expiryStatus.status === "expired"
+                                ? "Expired"
+                                : expiryStatus.status === "expiring"
+                                  ? "Almost Expiry"
+                                  : "Not"}
+                            </span>
                           </td>
                           <td className="px-3 py-3 text-navy font-semibold whitespace-nowrap">
                             {product.sku}
