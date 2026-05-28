@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye, Send, RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Invoice } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -19,6 +20,8 @@ export function AccountsReceivable() {
   const [error, setError] = useState<string | null>(null);
   const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [ageFilter, setAgeFilter] = useState<"all" | "0-7" | "8-30" | "31-60" | "60+">("all");
 
   const fetchUnpaid = async () => {
     try {
@@ -78,6 +81,22 @@ export function AccountsReceivable() {
     (inv) => daysOverdue(inv.created_at) > 30
   ).length;
 
+  const filtered = unpaidInvoices.filter((invoice) => {
+    const matchesSearch =
+      invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.booking_id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (ageFilter === "all") return true;
+    const days = daysOverdue(invoice.created_at);
+    if (ageFilter === "0-7") return days <= 7;
+    if (ageFilter === "8-30") return days > 7 && days <= 30;
+    if (ageFilter === "31-60") return days > 30 && days <= 60;
+    if (ageFilter === "60+") return days > 60;
+    return true;
+  });
+
   return (
     <div className="flex-1 flex flex-col p-6 gap-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -118,6 +137,27 @@ export function AccountsReceivable() {
         </Card>
       </div>
 
+      {/* Search and Filters */}
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        placeholder="Search by invoice ID or booking ID…"
+        filters={[
+          {
+            name: "ageFilter",
+            value: ageFilter,
+            onChange: (value) => setAgeFilter(value as any),
+            options: [
+              { label: "All Ages", value: "all" },
+              { label: "Current (0-7 days)", value: "0-7" },
+              { label: "8-30 Days", value: "8-30" },
+              { label: "31-60 Days", value: "31-60" },
+              { label: "60+ Days Overdue", value: "60+" },
+            ],
+          },
+        ]}
+      />
+
       {/* Unpaid Invoices Table */}
       <Card className="overflow-hidden">
         <Table>
@@ -132,14 +172,14 @@ export function AccountsReceivable() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {unpaidInvoices.length === 0 ? (
+            {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                  No unpaid invoices - Great job!
+                  {unpaidInvoices.length === 0 ? "No unpaid invoices - Great job!" : "No invoices match your search"}
                 </TableCell>
               </TableRow>
             ) : (
-              unpaidInvoices.map((invoice) => {
+              filtered.map((invoice) => {
                 const days = daysOverdue(invoice.created_at);
                 return (
                   <TableRow key={invoice.id}>

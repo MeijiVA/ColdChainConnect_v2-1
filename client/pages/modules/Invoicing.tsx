@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Eye, Download, RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Invoice } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -19,6 +20,9 @@ export function Invoicing() {
   const [error, setError] = useState<string | null>(null);
   const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "issued" | "paid">("all");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "paid" | "unpaid">("all");
 
   const fetchInvoices = async () => {
     try {
@@ -68,6 +72,17 @@ export function Invoicing() {
 
   if (isLoading && !isRefreshing) return <div className="p-6">Loading...</div>;
 
+  const filtered = invoices.filter((invoice) => {
+    const matchesSearch =
+      invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice.booking_id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (statusFilter !== "all" && invoice.status !== statusFilter) return false;
+    if (paymentFilter !== "all" && invoice.payment_status !== paymentFilter) return false;
+    return true;
+  });
+
   return (
     <div className="flex-1 flex flex-col p-6 gap-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -98,6 +113,36 @@ export function Invoicing() {
         </Card>
       )}
 
+      {/* Search and Filters */}
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        placeholder="Search by invoice ID or booking ID…"
+        filters={[
+          {
+            name: "statusFilter",
+            value: statusFilter,
+            onChange: (value) => setStatusFilter(value as any),
+            options: [
+              { label: "All Status", value: "all" },
+              { label: "Draft", value: "draft" },
+              { label: "Issued", value: "issued" },
+              { label: "Paid", value: "paid" },
+            ],
+          },
+          {
+            name: "paymentFilter",
+            value: paymentFilter,
+            onChange: (value) => setPaymentFilter(value as any),
+            options: [
+              { label: "All Payments", value: "all" },
+              { label: "Paid", value: "paid" },
+              { label: "Unpaid", value: "unpaid" },
+            ],
+          },
+        ]}
+      />
+
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
@@ -111,14 +156,14 @@ export function Invoicing() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {invoices.length === 0 ? (
+            {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                  No invoices found
+                  {invoices.length === 0 ? "No invoices found" : "No invoices match your search"}
                 </TableCell>
               </TableRow>
             ) : (
-              invoices.map((invoice) => (
+              filtered.map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell className="font-mono text-sm">{invoice.id.slice(0, 8)}</TableCell>
                   <TableCell className="font-mono text-sm">{invoice.booking_id.slice(0, 8)}</TableCell>

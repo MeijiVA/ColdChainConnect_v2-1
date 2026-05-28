@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { Customer } from "@shared/api";
 import { RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 
 interface CustomersProps {
   onBack?: () => void;
@@ -403,19 +404,14 @@ export function Customers({ onBack }: CustomersProps) {
       </div>
 
       <div className="flex flex-col gap-3 md:flex-row">
-        <div className="flex flex-1 items-center gap-2 rounded-lg border border-border bg-navy-mid px-3">
-          <span className="text-muted">🔍</span>
-          <input
-            type="text"
-            placeholder="Search by store, location, or payment type…"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="flex-1 border-none bg-transparent py-2 text-sm text-white outline-none placeholder:text-muted"
-          />
-        </div>
+        <SearchFilterBar
+          searchTerm={searchQuery}
+          onSearchChange={(value) => {
+            setSearchQuery(value);
+            setCurrentPage(1);
+          }}
+          placeholder="Search by store, location, or payment type…"
+        />
 
         <button
           onClick={openAddModal}
