@@ -9,7 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Eye, Download, RefreshCw, Search, X } from "lucide-react";
+import { Plus, Eye, Download, RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Invoice } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -113,45 +114,34 @@ export function Invoicing() {
       )}
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by invoice ID or booking ID…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border border-border rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-navy focus:ring-opacity-50"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm("")}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-navy focus:ring-opacity-50"
-        >
-          <option value="all">All Status</option>
-          <option value="draft">Draft</option>
-          <option value="issued">Issued</option>
-          <option value="paid">Paid</option>
-        </select>
-        <select
-          value={paymentFilter}
-          onChange={(e) => setPaymentFilter(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-navy focus:ring-opacity-50"
-        >
-          <option value="all">All Payments</option>
-          <option value="paid">Paid</option>
-          <option value="unpaid">Unpaid</option>
-        </select>
-      </div>
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        placeholder="Search by invoice ID or booking ID…"
+        filters={[
+          {
+            name: "statusFilter",
+            value: statusFilter,
+            onChange: (value) => setStatusFilter(value as any),
+            options: [
+              { label: "All Status", value: "all" },
+              { label: "Draft", value: "draft" },
+              { label: "Issued", value: "issued" },
+              { label: "Paid", value: "paid" },
+            ],
+          },
+          {
+            name: "paymentFilter",
+            value: paymentFilter,
+            onChange: (value) => setPaymentFilter(value as any),
+            options: [
+              { label: "All Payments", value: "all" },
+              { label: "Paid", value: "paid" },
+              { label: "Unpaid", value: "unpaid" },
+            ],
+          },
+        ]}
+      />
 
       <Card className="overflow-hidden">
         <Table>

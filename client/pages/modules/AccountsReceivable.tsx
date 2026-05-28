@@ -9,7 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Eye, Send, RefreshCw, Search, X } from "lucide-react";
+import { Eye, Send, RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Invoice } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -137,37 +138,25 @@ export function AccountsReceivable() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by invoice ID or booking ID…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border border-border rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-navy focus:ring-opacity-50"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm("")}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <select
-          value={ageFilter}
-          onChange={(e) => setAgeFilter(e.target.value as any)}
-          className="px-3 py-2 border border-border rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-navy focus:ring-opacity-50"
-        >
-          <option value="all">All Ages</option>
-          <option value="0-7">Current (0-7 days)</option>
-          <option value="8-30">8-30 Days</option>
-          <option value="31-60">31-60 Days</option>
-          <option value="60+">60+ Days Overdue</option>
-        </select>
-      </div>
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        placeholder="Search by invoice ID or booking ID…"
+        filters={[
+          {
+            name: "ageFilter",
+            value: ageFilter,
+            onChange: (value) => setAgeFilter(value as any),
+            options: [
+              { label: "All Ages", value: "all" },
+              { label: "Current (0-7 days)", value: "0-7" },
+              { label: "8-30 Days", value: "8-30" },
+              { label: "31-60 Days", value: "31-60" },
+              { label: "60+ Days Overdue", value: "60+" },
+            ],
+          },
+        ]}
+      />
 
       {/* Unpaid Invoices Table */}
       <Card className="overflow-hidden">

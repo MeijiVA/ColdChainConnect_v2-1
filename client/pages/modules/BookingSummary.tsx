@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye, RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Booking } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -19,6 +20,8 @@ export function BookingSummary() {
   const [error, setError] = useState<string | null>(null);
   const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "prep" | "ready">("all");
 
   const fetchBookings = async () => {
     try {
@@ -69,6 +72,16 @@ export function BookingSummary() {
 
   if (isLoading) return <div className="p-6">Loading...</div>;
 
+  const filtered = bookings.filter((booking) => {
+    const matchesSearch =
+      booking.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.customer_id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    if (!matchesSearch) return false;
+    if (statusFilter !== "all" && booking.status !== statusFilter) return false;
+    return true;
+  });
+
   return (
     <div className="flex-1 flex flex-col p-6 gap-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -93,6 +106,27 @@ export function BookingSummary() {
         </Card>
       )}
 
+      {/* Search and Filters */}
+      <SearchFilterBar
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        placeholder="Search by order ID or customer ID…"
+        filters={[
+          {
+            name: "statusFilter",
+            value: statusFilter,
+            onChange: (value) => setStatusFilter(value as any),
+            options: [
+              { label: "All Status", value: "all" },
+              { label: "Pending", value: "pending" },
+              { label: "Approved", value: "approved" },
+              { label: "Prep", value: "prep" },
+              { label: "Ready", value: "ready" },
+            ],
+          },
+        ]}
+      />
+
       <Card className="overflow-hidden">
         <Table>
           <TableHeader>
@@ -105,14 +139,14 @@ export function BookingSummary() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {bookings.length === 0 ? (
+            {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                  No bookings found
+                  {bookings.length === 0 ? "No bookings found" : "No bookings match your search"}
                 </TableCell>
               </TableRow>
             ) : (
-              bookings.map((booking) => (
+              filtered.map((booking) => (
                 <TableRow key={booking.id}>
                   <TableCell className="font-mono text-sm">{booking.id.slice(0, 8)}</TableCell>
                   <TableCell>{booking.customer_id.slice(0, 8)}</TableCell>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Customer, Truck, Invoice } from "@shared/api";
 
 interface Receipt {
@@ -35,9 +36,10 @@ export function DeliveryHistory() {
   const [error,     setError]     = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [search,     setSearch]     = useState("");
-  const [page,       setPage]       = useState(1);
-  const [viewReceipt, setViewReceipt] = useState<ReceiptExt | null>(null);
+  const [search,       setSearch]       = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
+  const [page,         setPage]         = useState(1);
+  const [viewReceipt,  setViewReceipt]  = useState<ReceiptExt | null>(null);
 
   const PER_PAGE = 15;
 
@@ -89,12 +91,15 @@ export function DeliveryHistory() {
 
   const filtered = receipts.filter((r) => {
     const q = search.toLowerCase();
-    return (
+    const matchesSearch =
       r.receipt_number.toLowerCase().includes(q) ||
       (r.customer?.store_name ?? "").toLowerCase().includes(q) ||
       (r.truck?.name ?? "").toLowerCase().includes(q) ||
-      r.invoice_id.toLowerCase().includes(q)
-    );
+      r.invoice_id.toLowerCase().includes(q);
+
+    if (!matchesSearch) return false;
+    if (customerFilter && customerFilter !== "all" && r.customer_id !== customerFilter) return false;
+    return true;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
@@ -142,17 +147,26 @@ export function DeliveryHistory() {
         <SummaryCard label="Paid Invoices"     value={receipts.length.toString()} icon="✅" color="green" />
       </div>
 
-      {/* Search */}
-      <div className="flex items-center bg-navy-mid border border-border rounded-lg px-3 gap-2 max-w-md">
-        <span className="text-muted">🔍</span>
-        <input
-          type="text"
-          placeholder="Search by receipt #, customer, truck, or invoice…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="flex-1 bg-transparent border-none text-white placeholder-muted py-2 outline-none text-sm"
-        />
-      </div>
+      {/* Search and Filters */}
+      <SearchFilterBar
+        searchTerm={search}
+        onSearchChange={(value) => { setSearch(value); setPage(1); }}
+        placeholder="Search by receipt #, customer, truck, or invoice…"
+        filters={[
+          {
+            name: "customerFilter",
+            value: customerFilter,
+            onChange: (value) => { setCustomerFilter(value); setPage(1); },
+            options: [
+              { label: "All Customers", value: "all" },
+              ...customers.map((c) => ({
+                label: c.store_name || c.id.slice(0, 8),
+                value: c.id,
+              })),
+            ],
+          },
+        ]}
+      />
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
