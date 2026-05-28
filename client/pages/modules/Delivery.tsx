@@ -56,6 +56,7 @@ export function DeliveryDispatch() {
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryExt | null>(null);
   const [showDispatchModal, setShowDispatchModal] = useState(false);
   const [showAddDeliveryModal, setShowAddDeliveryModal] = useState(false);
+  const [showChangeDriverModal, setShowChangeDriverModal] = useState(false);
   const [confirmingItem, setConfirmingItem] = useState<string | null>(null); // itemId being confirmed
 
   // ── Fetch all data ──────────────────────────────────────────────────────────
@@ -264,26 +265,64 @@ export function DeliveryDispatch() {
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-                    Deliveries for {selectedTruck.name}
-                  </p>
-                  {selectedTruck.driver_id && (
-                    <p className="text-xs text-muted mt-1">
-                      Driver: <span className="font-semibold text-navy">{drivers.find((d) => d.id === selectedTruck.driver_id)?.id.slice(0, 8) || "—"}</span>
+              {/* Truck & Driver Card */}
+              <div className="bg-white rounded-xl border border-border p-5 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wider">Truck</p>
+                    <p className="font-rajdhani font-bold text-navy text-lg mt-1">{selectedTruck.name}</p>
+                    <p className="text-xs text-muted mt-0.5">{selectedTruck.district}</p>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadgeClass(selectedTruck.status)}`}>
+                    {selectedTruck.status === "in_transit" ? "In Transit" : selectedTruck.status === "maintenance" ? "Maintenance" : "Available"}
+                  </span>
+                </div>
+
+                {/* Driver Assignment */}
+                <div className="border-t border-border pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wider">Driver</p>
+                    {truckDeliveries.some((d) => d.status !== "completed") ? (
+                      <span className="text-xs font-semibold text-accent-2 bg-accent-2/10 px-2 py-1 rounded">Locked</span>
+                    ) : (
+                      <button
+                        onClick={() => setShowChangeDriverModal(true)}
+                        className="text-xs font-semibold text-accent-2 hover:opacity-70"
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                  {selectedTruck.driver_id ? (
+                    <div className="bg-off-white rounded-lg p-3">
+                      <p className="font-semibold text-navy">{drivers.find((d) => d.id === selectedTruck.driver_id)?.id.slice(0, 8) || "—"}</p>
                       {drivers.find((d) => d.id === selectedTruck.driver_id)?.contact_info && (
-                        <span className="text-muted"> ({drivers.find((d) => d.id === selectedTruck.driver_id)?.contact_info})</span>
+                        <p className="text-xs text-muted mt-1">{drivers.find((d) => d.id === selectedTruck.driver_id)?.contact_info}</p>
                       )}
-                    </p>
+                      {drivers.find((d) => d.id === selectedTruck.driver_id)?.address && (
+                        <p className="text-xs text-muted mt-1">{drivers.find((d) => d.id === selectedTruck.driver_id)?.address}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">
+                      No driver assigned
+                    </div>
                   )}
                 </div>
+
                 <button
                   onClick={() => setShowAddDeliveryModal(true)}
-                  className="px-3 py-1.5 bg-navy text-white rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity"
+                  className="w-full px-3 py-2 bg-navy text-white rounded-lg text-xs font-semibold hover:opacity-90 transition-opacity"
                 >
                   ＋ Add Delivery
                 </button>
+              </div>
+
+              {/* Deliveries Section Header */}
+              <div>
+                <p className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">
+                  Deliveries ({truckDeliveries.length})
+                </p>
               </div>
 
               {truckDeliveries.length === 0 ? (
@@ -426,6 +465,30 @@ export function DeliveryDispatch() {
         />
       )}
 
+      {/* Change driver modal */}
+      {showChangeDriverModal && selectedTruck && (
+        <ChangeDriverModal
+          truck={selectedTruck}
+          drivers={drivers}
+          token={token!}
+          onClose={() => setShowChangeDriverModal(false)}
+          onSave={async (driverId) => {
+            try {
+              const res = await fetch(`/api/trucks/${selectedTruck.id}`, {
+                method: "PATCH",
+                headers: authHeaders(token!),
+                body: JSON.stringify({ driver_id: driverId }),
+              });
+              if (!res.ok) throw new Error(await res.text());
+              await fetchAll();
+              setShowChangeDriverModal(false);
+            } catch (err) {
+              alert("Failed to update driver: " + (err instanceof Error ? err.message : String(err)));
+            }
+          }}
+        />
+      )}
+
       {/* Add another delivery to selected truck */}
       {showAddDeliveryModal && selectedTruck && (
         <AddDeliveryModal
@@ -554,6 +617,94 @@ function DispatchTruckModal({
         </button>
       </div>
     </ModalShell>
+  );
+}
+
+// ─── Change Driver Modal ──────────────────────────────────────────────────────
+
+function ChangeDriverModal({
+  truck, drivers, token, onClose, onSave,
+}: {
+  truck: Truck;
+  drivers: Driver[];
+  token: string;
+  onClose: () => void;
+  onSave: (driverId: string) => Promise<void>;
+}) {
+  const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!selectedDriverId) {
+      alert("Please select a driver");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(selectedDriverId);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Change Driver for {truck.name}</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-2">Select Driver *</label>
+            <select
+              value={selectedDriverId}
+              onChange={(e) => setSelectedDriverId(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            >
+              <option value="">Choose a driver…</option>
+              {drivers
+                .filter((d) => d.is_active)
+                .map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.id.slice(0, 8)} {driver.contact_info && `— ${driver.contact_info}`}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {selectedDriverId && drivers.find((d) => d.id === selectedDriverId) && (
+            <div className="bg-off-white rounded-lg p-3 space-y-1">
+              <p className="text-xs text-muted">Driver Details:</p>
+              <p className="font-semibold text-navy">{drivers.find((d) => d.id === selectedDriverId)?.id.slice(0, 8)}</p>
+              {drivers.find((d) => d.id === selectedDriverId)?.contact_info && (
+                <p className="text-xs text-muted">📱 {drivers.find((d) => d.id === selectedDriverId)?.contact_info}</p>
+              )}
+              {drivers.find((d) => d.id === selectedDriverId)?.address && (
+                <p className="text-xs text-muted">📍 {drivers.find((d) => d.id === selectedDriverId)?.address}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end gap-2 border-t border-border rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-border rounded-lg font-semibold text-sm hover:bg-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!selectedDriverId || saving}
+            className="px-4 py-2 bg-accent-2 text-white rounded-lg font-semibold text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Updating…" : "Change Driver"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
