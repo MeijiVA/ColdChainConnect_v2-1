@@ -413,8 +413,36 @@ export function Inventory() {
     }
   };
 
+  const fetchProductsFromApi = async () => {
+    try {
+      const token = localStorage.getItem("auth_token") || "";
+      const response = await fetch("/api/products", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const mapped: InventoryProduct[] = data.map((p: any) => ({
+          id: p.id,
+          sku: p.sku || p.name,
+          description: p.name,
+          unitPrice: parseFloat(p.price) || 0,
+          supplierId: "",
+          weight: 0,
+          quantity: 0,
+          expiryDate: new Date().toISOString().split("T")[0],
+          imageFilename: p.image_filename,
+          reorderPoint: 0,
+          lastUpdated: p.updated_at || new Date().toISOString(),
+        }));
+        setProducts(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to load products from API:", err);
+    }
+  };
+
   // Product management functions
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     if (formData.unitPrice <= 0) {
       alert("Unit price must be a positive number");
       return;
@@ -428,41 +456,91 @@ export function Inventory() {
       return;
     }
 
-    if (selectedProduct) {
-      setProducts(
-        products.map((p) =>
-          p.id === selectedProduct.id
-            ? { ...formData, lastUpdated: new Date().toISOString().split("T")[0] }
-            : p
-        )
-      );
-    } else {
-      const newProduct = {
-        ...formData,
-        id: Date.now().toString(),
-        lastUpdated: new Date().toISOString().split("T")[0],
-      };
-      setProducts([...products, newProduct]);
-      // Add new product to current batch
-      if (currentBatch) {
-        addProductToBatch(newProduct.id);
-      }
-    }
+    try {
+      const token = localStorage.getItem("auth_token") || "";
 
-    resetForm();
-    setIsModalOpen(false);
+      if (selectedProduct) {
+        // Update existing product
+        const response = await fetch(`/api/products/${selectedProduct.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.description,
+            sku: formData.sku,
+            price: formData.unitPrice,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to update product");
+        }
+      } else {
+        // Create new product
+        const response = await fetch("/api/products", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.description,
+            sku: formData.sku,
+            price: formData.unitPrice,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to create product");
+        }
+
+        const newProduct = await response.json();
+        // Add new product to current batch
+        if (currentBatch) {
+          addProductToBatch(newProduct.id);
+        }
+      }
+
+      // Refetch products from database
+      await fetchProductsFromApi();
+      resetForm();
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("Failed to save product:", err);
+      alert("Failed to save product. Please try again.");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
-      setProducts(products.filter((p) => p.id !== id));
-      // Remove from all batches
-      setBatches(
-        batches.map((b) => ({
-          ...b,
-          items: b.items.filter((item) => item.productId !== id),
-        }))
-      );
+      try {
+        const token = localStorage.getItem("auth_token") || "";
+        const response = await fetch(`/api/products/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to delete product");
+        }
+
+        setProducts(products.filter((p) => p.id !== id));
+        // Remove from all batches
+        setBatches(
+          batches.map((b) => ({
+            ...b,
+            items: b.items.filter((item) => item.productId !== id),
+          }))
+        );
+
+        // Refetch products from database
+        await fetchProductsFromApi();
+      } catch (err) {
+        console.error("Failed to delete product:", err);
+        alert("Failed to delete product. Please try again.");
+      }
     }
   };
 
