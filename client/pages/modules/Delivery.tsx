@@ -54,7 +54,7 @@ export function DeliveryDispatch() {
 
   const [selectedTruck,    setSelectedTruck]    = useState<Truck | null>(null);
   const [selectedDelivery, setSelectedDelivery] = useState<DeliveryExt | null>(null);
-  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [showAddTruckModal, setShowAddTruckModal] = useState(false);
   const [showAddDeliveryModal, setShowAddDeliveryModal] = useState(false);
   const [showChangeDriverModal, setShowChangeDriverModal] = useState(false);
   const [confirmingItem, setConfirmingItem] = useState<string | null>(null); // itemId being confirmed
@@ -204,10 +204,10 @@ export function DeliveryDispatch() {
             Refresh
           </button>
           <button
-            onClick={() => { setSelectedTruck(null); setSelectedDelivery(null); setShowDispatchModal(true); }}
+            onClick={() => setShowAddTruckModal(true)}
             className="px-4 py-2 bg-accent-2 text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity"
           >
-            ＋ Dispatch New Truck
+            ＋ Add New Truck
           </button>
         </div>
       </div>
@@ -438,29 +438,15 @@ export function DeliveryDispatch() {
         </div>
       </div>
 
-      {/* Dispatch new truck modal (first delivery) */}
-      {showDispatchModal && (
-        <DispatchTruckModal
-          trucks={trucks}
+      {/* Add new truck modal */}
+      {showAddTruckModal && (
+        <AddTruckModal
           drivers={drivers}
-          eligibleInvoices={eligibleInvoices}
-          customers={customers}
           token={token!}
-          onClose={() => setShowDispatchModal(false)}
-          onCreated={async (truckId, driverId, destinations) => {
-            if (!token) return;
-            try {
-              const res = await fetch("/api/deliveries", {
-                method: "POST",
-                headers: authHeaders(token),
-                body: JSON.stringify({ truck_id: truckId, driver_id: driverId, destinations }),
-              });
-              if (!res.ok) throw new Error(await res.text());
-              await fetchAll();
-              setShowDispatchModal(false);
-            } catch (err) {
-              alert("Failed to dispatch: " + (err instanceof Error ? err.message : String(err)));
-            }
+          onClose={() => setShowAddTruckModal(false)}
+          onCreated={async () => {
+            await fetchAll();
+            setShowAddTruckModal(false);
           }}
         />
       )}
@@ -503,120 +489,140 @@ export function DeliveryDispatch() {
   );
 }
 
-// ─── Dispatch New Truck Modal ──────────────────────────────────────────────────
+// ─── Add New Truck Modal ──────────────────────────────────────────────────────
 
-function DispatchTruckModal({
-  trucks, drivers, eligibleInvoices, customers, token, onClose, onCreated,
+function AddTruckModal({
+  drivers, token, onClose, onCreated,
 }: {
-  trucks: Truck[];
   drivers: Driver[];
-  eligibleInvoices: Invoice[];
-  customers: Customer[];
   token: string;
   onClose: () => void;
-  onCreated: (truckId: string, driverId: string, destinations: { invoice_id: string; destination_customer_id: string }[]) => Promise<void>;
+  onCreated: () => Promise<void>;
 }) {
-  const [selectedTruckId, setSelectedTruckId] = useState("");
+  const [truckName, setTruckName] = useState("");
+  const [truckDistrict, setTruckDistrict] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState("");
-  const [stops, setStops] = useState<{ invoice_id: string; destination_customer_id: string }[]>([
-    { invoice_id: "", destination_customer_id: "" },
-  ]);
+  const [truckStatus, setTruckStatus] = useState<"available" | "in_transit" | "maintenance">("available");
   const [saving, setSaving] = useState(false);
 
-  const addStop = () => setStops((s) => [...s, { invoice_id: "", destination_customer_id: "" }]);
-  const removeStop = (i: number) => setStops((s) => s.filter((_, idx) => idx !== i));
-  const updateStop = (i: number, field: "invoice_id" | "destination_customer_id", val: string) => {
-    setStops((s) => s.map((stop, idx) => idx === i ? { ...stop, [field]: val } : stop));
-  };
-
-  // Auto-fill customer from invoice's booking
-  const handleInvoiceChange = (i: number, invoiceId: string) => {
-    updateStop(i, "invoice_id", invoiceId);
-  };
-
-  const valid = selectedTruckId && selectedDriverId;
+  const valid = truckName && truckDistrict;
 
   const handleSave = async () => {
-    if (!valid) { alert("Please select a truck and driver."); return; }
-    const filledStops = stops.filter((s) => s.invoice_id && s.destination_customer_id);
+    if (!valid) { alert("Please fill in truck name and district."); return; }
     setSaving(true);
-    try { await onCreated(selectedTruckId, selectedDriverId, filledStops); }
-    finally { setSaving(false); }
+    try {
+      const res = await fetch("/api/trucks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: truckName,
+          district: truckDistrict,
+          driver_id: selectedDriverId || undefined,
+          status: truckStatus,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await onCreated();
+    } catch (err) {
+      alert("Failed to add truck: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <ModalShell title="Dispatch New Truck" onClose={onClose}>
-      <div className="space-y-5">
-        {/* Truck picker */}
-        <div>
-          <label className="block text-xs font-semibold text-navy mb-1">Truck *</label>
-          <select
-            value={selectedTruckId}
-            onChange={(e) => setSelectedTruckId(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
-          >
-            <option value="">Select a truck…</option>
-            {trucks.map((t) => (
-              <option key={t.id} value={t.id}>{t.name} — {t.district} ({t.status})</option>
-            ))}
-          </select>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Add New Truck</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
         </div>
 
-        {/* Driver picker */}
-        <div>
-          <label className="block text-xs font-semibold text-navy mb-1">Driver *</label>
-          <select
-            value={selectedDriverId}
-            onChange={(e) => setSelectedDriverId(e.target.value)}
-            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
-          >
-            <option value="">Select a driver…</option>
-            {drivers
-              .filter((d) => d.is_active)
-              .map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.id.slice(0, 8)} {driver.contact_info && `— ${driver.contact_info}`}
-                </option>
-              ))}
-          </select>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Truck Name *</label>
+            <input
+              type="text"
+              value={truckName}
+              onChange={(e) => setTruckName(e.target.value)}
+              placeholder="e.g., Truck A"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">District *</label>
+            <input
+              type="text"
+              value={truckDistrict}
+              onChange={(e) => setTruckDistrict(e.target.value)}
+              placeholder="e.g., Metro Manila"
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Status</label>
+            <select
+              value={truckStatus}
+              onChange={(e) => setTruckStatus(e.target.value as "available" | "in_transit" | "maintenance")}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            >
+              <option value="available">Available</option>
+              <option value="in_transit">In Transit</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Assign Driver (Optional)</label>
+            <select
+              value={selectedDriverId}
+              onChange={(e) => setSelectedDriverId(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            >
+              <option value="">No driver assigned</option>
+              {drivers
+                .filter((d) => d.is_active)
+                .map((driver) => (
+                  <option key={driver.id} value={driver.id}>
+                    {driver.id.slice(0, 8)} {driver.contact_info && `— ${driver.contact_info}`}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {selectedDriverId && drivers.find((d) => d.id === selectedDriverId) && (
+            <div className="bg-off-white rounded-lg p-3 space-y-1">
+              <p className="text-xs text-muted">Driver Info:</p>
+              <p className="font-semibold text-navy">{drivers.find((d) => d.id === selectedDriverId)?.id.slice(0, 8)}</p>
+              {drivers.find((d) => d.id === selectedDriverId)?.contact_info && (
+                <p className="text-xs text-muted">📱 {drivers.find((d) => d.id === selectedDriverId)?.contact_info}</p>
+              )}
+              {drivers.find((d) => d.id === selectedDriverId)?.address && (
+                <p className="text-xs text-muted">📍 {drivers.find((d) => d.id === selectedDriverId)?.address}</p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Stops */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-semibold text-navy">Delivery Stops</label>
-            <button onClick={addStop} className="text-xs text-accent-2 font-semibold hover:opacity-80">＋ Add Stop</button>
-          </div>
-          <div className="space-y-3">
-            {stops.map((stop, i) => (
-              <StopRow
-                key={i}
-                index={i}
-                stop={stop}
-                invoices={eligibleInvoices}
-                customers={customers}
-                onInvoiceChange={(v) => handleInvoiceChange(i, v)}
-                onCustomerChange={(v) => updateStop(i, "destination_customer_id", v)}
-                onRemove={stops.length > 1 ? () => removeStop(i) : undefined}
-              />
-            ))}
-          </div>
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end gap-2 border-t border-border rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-border rounded-lg font-semibold text-sm hover:bg-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!valid || saving}
+            className="px-4 py-2 bg-accent-2 text-white rounded-lg font-semibold text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? "Adding…" : "Add Truck"}
+          </button>
         </div>
       </div>
-
-      <div className="flex justify-end gap-2 pt-4 border-t border-border">
-        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={!valid || saving}
-          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? "Dispatching…" : "Dispatch Truck"}
-        </button>
-      </div>
-    </ModalShell>
+    </div>
   );
 }
 
