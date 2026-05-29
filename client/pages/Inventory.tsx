@@ -247,20 +247,22 @@ export function Inventory() {
           </button>
         </div>
 
-        {/* Pallet Selector */}
+        {/* Pallet Selector - Show as separate card tab if pallets exist */}
         {currentBatch && currentBatch.id !== "batch-all" && currentBatch.pallets.length > 0 && (
           <div className="border-t border-border pt-4">
-            <label className="text-xs font-semibold text-navy mb-2 block">Select Pallet</label>
-            <div className="flex flex-wrap gap-2">
+            <label className="text-xs font-semibold text-navy mb-3 block">Pallets in Batch</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <button
                 onClick={() => setSelectedPalletId(null)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                className={`px-4 py-3 rounded-lg font-semibold text-sm transition-colors border-2 text-left ${
                   !selectedPalletId
-                    ? "bg-accent-2 text-white"
-                    : "bg-off-white border border-border text-navy hover:bg-off-white/70"
+                    ? "bg-accent-2 border-accent-2 text-white"
+                    : "border-border text-navy hover:border-accent-2/50 hover:bg-off-white/50"
                 }`}
               >
-                All Pallets ({currentBatch.pallets.length})
+                <div className="text-lg">📦</div>
+                <div className="font-semibold">All Pallets</div>
+                <div className="text-xs opacity-75">{currentBatch.pallets.length} pallets</div>
               </button>
               {currentBatch.pallets.map((pallet) => {
                 const itemCount = pallet.items.length;
@@ -269,13 +271,15 @@ export function Inventory() {
                   <button
                     key={pallet.id}
                     onClick={() => setSelectedPalletId(pallet.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`px-4 py-3 rounded-lg font-semibold text-sm transition-colors border-2 text-left ${
                       selectedPalletId === pallet.id
-                        ? "bg-accent-2 text-white"
-                        : "bg-off-white border border-border text-navy hover:bg-off-white/70"
+                        ? "bg-accent-2 border-accent-2 text-white"
+                        : "border-border text-navy hover:border-accent-2/50 hover:bg-off-white/50"
                     }`}
                   >
-                    {pallet.palletId} ({itemCount} items, {totalQty} qty)
+                    <div className="text-lg">🔲</div>
+                    <div className="font-semibold truncate">{pallet.palletId}</div>
+                    <div className="text-xs opacity-75">{itemCount} items · {totalQty} qty</div>
                   </button>
                 );
               })}
@@ -283,6 +287,15 @@ export function Inventory() {
           </div>
         )}
       </div>
+
+      {/* Display Status */}
+      {selectedBatchId !== "batch-all" && selectedPalletId && (
+        <div className="bg-accent-2/10 border border-accent-2 rounded-lg p-3">
+          <p className="text-sm text-navy font-semibold">
+            📍 Viewing <span className="text-accent-2">{currentBatch?.name}</span> → Pallet <span className="text-accent-2">{currentBatch?.pallets.find(p => p.id === selectedPalletId)?.palletId}</span>
+          </p>
+        </div>
+      )}
 
       {/* Search + Add + Delete Toggle */}
       <div className="flex flex-col md:flex-row gap-3 items-stretch">
