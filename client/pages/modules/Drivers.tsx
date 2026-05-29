@@ -284,7 +284,7 @@ export function Drivers({ onBack }: DriversProps) {
         />
       </div>
 
-      {/* Search + Add */}
+      {/* Search + Add + Delete Toggle */}
       <div className="flex flex-col md:flex-row gap-3">
         <SearchFilterBar
           searchTerm={searchQuery}
@@ -299,6 +299,16 @@ export function Drivers({ onBack }: DriversProps) {
           className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2 w-fit"
         >
           ➕ Add Driver
+        </button>
+        <button
+          onClick={() => setShowDeleteButtons(!showDeleteButtons)}
+          className={`w-fit px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            showDeleteButtons
+              ? "bg-red text-white hover:opacity-90"
+              : "bg-white border border-border text-navy hover:bg-off-white"
+          }`}
+        >
+          {showDeleteButtons ? "🔓 Delete Enabled" : "🔒 Enable Delete"}
         </button>
       </div>
 
@@ -354,20 +364,11 @@ export function Drivers({ onBack }: DriversProps) {
                       {driver.contact_info || <span className="text-muted">—</span>}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openEditModal(driver)}
-                          className="px-3 py-1 border border-border rounded-lg text-xs font-semibold text-navy hover:bg-off-white transition-colors"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(driver.id)}
-                          className="px-3 py-1 border border-red/30 rounded-lg text-xs font-semibold text-red hover:bg-red/10 transition-colors"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
+                      <ActionButtons
+                        onEdit={() => openEditModal(driver)}
+                        onDelete={() => handleDelete(driver.id)}
+                        showDelete={showDeleteButtons}
+                      />
                     </td>
                   </tr>
                 ))

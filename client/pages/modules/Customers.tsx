@@ -3,6 +3,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { Customer } from "@shared/api";
 import { RefreshCw } from "lucide-react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { ActionButtons } from "@/components/ActionButtons";
 
 interface CustomersProps {
   onBack?: () => void;
@@ -185,6 +186,7 @@ export function Customers({ onBack }: CustomersProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
   const [formData, setFormData] = useState<CustomerForm>({
     store_name: "",
     location: "",
@@ -419,6 +421,17 @@ export function Customers({ onBack }: CustomersProps) {
         >
           ➕ Add Customer
         </button>
+
+        <button
+          onClick={() => setShowDeleteButtons(!showDeleteButtons)}
+          className={`w-fit rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            showDeleteButtons
+              ? "bg-red text-white hover:opacity-90"
+              : "border border-border bg-white text-navy hover:bg-off-white"
+          }`}
+        >
+          {showDeleteButtons ? "🔓 Delete Enabled" : "🔒 Enable Delete"}
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-white">
@@ -487,20 +500,11 @@ export function Customers({ onBack }: CustomersProps) {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openEditModal(customer)}
-                          className="rounded-lg border border-border px-3 py-1 text-xs font-semibold text-navy transition-colors hover:bg-off-white"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(customer.id)}
-                          className="rounded-lg border border-red/30 px-3 py-1 text-xs font-semibold text-red transition-colors hover:bg-red/10"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
+                      <ActionButtons
+                        onEdit={() => openEditModal(customer)}
+                        onDelete={() => handleDelete(customer.id)}
+                        showDelete={showDeleteButtons}
+                      />
                     </td>
                   </tr>
                 ))
