@@ -497,7 +497,7 @@ export function Drivers({ onBack }: DriversProps) {
                     <td className="px-3 py-3 text-navy">
                       {driver.contact_info || <span className="text-muted">—</span>}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-right">
                       <ActionButtons
                         onView={() => setViewingDriver(driver)}
                         onEdit={() => openEditModal(driver)}
@@ -512,34 +512,31 @@ export function Drivers({ onBack }: DriversProps) {
           </table>
         </div>
 
-        {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-off-white/50">
-            <span className="text-xs text-muted">
-              Showing {(currentPage - 1) * itemsPerPage + 1}–
-              {Math.min(currentPage * itemsPerPage, filteredDrivers.length)} of{" "}
-              {filteredDrivers.length} drivers
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
-              >
-                ← Prev
-              </button>
-              <span className="px-3 py-1 text-xs font-semibold text-navy">
-                {currentPage} / {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
-              >
-                Next →
-              </button>
-            </div>
+        {/* Pagination - Always Display */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-off-white/50">
+          <div className="text-xs text-muted">
+            Page {currentPage} of {Math.max(1, totalPages)} · {filteredDrivers.length} drivers
           </div>
-        )}
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Prev
+            </button>
+            <span className="px-3 py-1 text-xs font-semibold text-navy bg-white rounded border border-border">
+              {currentPage}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="text-xs text-muted">Total drivers: {filteredDrivers.length}</div>

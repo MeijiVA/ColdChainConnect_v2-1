@@ -438,6 +438,9 @@ export function Pricing({ onBack }: PricingProps) {
                   Status
                 </th>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Image
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
                   Product Name
                 </th>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
@@ -454,7 +457,7 @@ export function Pricing({ onBack }: PricingProps) {
             <tbody>
               {paginatedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={6} className="px-3 py-6 text-center text-muted">
                     {products.length === 0 ? "No products found" : "No results matching your search"}
                   </td>
                 </tr>
@@ -472,6 +475,17 @@ export function Pricing({ onBack }: PricingProps) {
                         {product.batch_tracking_enabled ? "Tracked" : "Untracked"}
                       </span>
                     </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {product.image_filename ? (
+                        <div className="w-10 h-10 bg-off-white rounded-lg overflow-hidden border border-border flex items-center justify-center">
+                          <img src={`/uploads/${product.image_filename}`} alt={product.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 bg-off-white rounded-lg border border-border flex items-center justify-center text-muted text-xs">
+                          —
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-3 text-navy font-semibold">
                       {product.name}
                     </td>
@@ -488,7 +502,7 @@ export function Pricing({ onBack }: PricingProps) {
                         {product.batch_tracking_enabled ? "Yes" : "No"}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-right">
                       <ActionButtons
                         onView={() => setViewingProduct(product)}
                         onEdit={() => openEditModal(product)}
@@ -503,15 +517,29 @@ export function Pricing({ onBack }: PricingProps) {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
-          <div className="text-xs text-muted">Page {currentPage} of {Math.max(1, totalPages)} · {filteredProducts.length} products</div>
-          <div className="flex gap-2">
-            <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 border border-border rounded text-xs font-semibold disabled:opacity-50">← Prev</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).slice(Math.max(0, currentPage - 2), currentPage + 1).map((page) => (
-              <button key={page} onClick={() => setCurrentPage(page)} className={`px-3 py-1 rounded text-xs font-semibold ${page === currentPage ? "bg-accent-2 text-white" : "border border-border hover:bg-off-white"}`}>{page}</button>
-            ))}
-            <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border border-border rounded text-xs font-semibold disabled:opacity-50">Next →</button>
+        {/* Pagination - Always Display */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-off-white/50">
+          <div className="text-xs text-muted">
+            Page {currentPage} of {Math.max(1, totalPages)} · {filteredProducts.length} products
+          </div>
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              ← Prev
+            </button>
+            <span className="px-3 py-1 text-xs font-semibold text-navy bg-white rounded border border-border">
+              {currentPage}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
           </div>
         </div>
       </div>
