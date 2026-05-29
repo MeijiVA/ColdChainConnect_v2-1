@@ -126,7 +126,7 @@ export function BookingSummary() {
     }
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/bookings/${selectedBooking.id}`, {
+      const response = await fetch(`/api/bookings/${selectedBooking.id}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
