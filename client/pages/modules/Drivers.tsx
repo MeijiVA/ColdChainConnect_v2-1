@@ -497,7 +497,7 @@ export function Drivers({ onBack }: DriversProps) {
                     <td className="px-3 py-3 text-navy">
                       {driver.contact_info || <span className="text-muted">—</span>}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-right">
                       <ActionButtons
                         onView={() => setViewingDriver(driver)}
                         onEdit={() => openEditModal(driver)}

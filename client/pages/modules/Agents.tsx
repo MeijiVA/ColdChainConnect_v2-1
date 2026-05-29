@@ -418,7 +418,7 @@ export function Agents() {
                         {agent.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-right">
                       <ActionButtons
                         onView={() => setViewingAgent(agent)}
                         onEdit={() => openEditModal(agent)}

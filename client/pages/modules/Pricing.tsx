@@ -502,7 +502,7 @@ export function Pricing({ onBack }: PricingProps) {
                         {product.batch_tracking_enabled ? "Yes" : "No"}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3 text-right">
                       <ActionButtons
                         onView={() => setViewingProduct(product)}
                         onEdit={() => openEditModal(product)}
