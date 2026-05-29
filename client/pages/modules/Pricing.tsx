@@ -4,6 +4,7 @@ import { useInventoryContext } from "../../context/InventoryContext";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Product } from "@shared/api";
 import { Upload, RefreshCw } from "lucide-react";
+import { ActionButtons } from "@/components/ActionButtons";
 
 interface PricingProps {
   onBack?: () => void;
@@ -179,6 +180,7 @@ export function Pricing({ onBack }: PricingProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
   const [formData, setFormData] = useState<ProductForm>({
     name: "",
     sku: "",
@@ -354,7 +356,7 @@ export function Pricing({ onBack }: PricingProps) {
         />
       </div>
 
-      {/* Search + Add */}
+      {/* Search + Add + Delete Toggle */}
       <div className="flex flex-col md:flex-row gap-3 items-stretch">
         <SearchFilterBar
           searchTerm={searchQuery}
@@ -369,6 +371,16 @@ export function Pricing({ onBack }: PricingProps) {
           className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2 w-fit"
         >
           ➕ Add Product
+        </button>
+        <button
+          onClick={() => setShowDeleteButtons(!showDeleteButtons)}
+          className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            showDeleteButtons
+              ? "bg-red text-white hover:opacity-90"
+              : "bg-white border border-border text-navy hover:bg-off-white"
+          }`}
+        >
+          {showDeleteButtons ? "🔓 Delete Enabled" : "🔒 Enable Delete"}
         </button>
       </div>
 
@@ -433,20 +445,11 @@ export function Pricing({ onBack }: PricingProps) {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openEditModal(product)}
-                          className="px-3 py-1 border border-border rounded-lg text-xs font-semibold text-navy hover:bg-off-white transition-colors"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          className="px-3 py-1 border border-red/30 rounded-lg text-xs font-semibold text-red hover:bg-red/10 transition-colors"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
+                      <ActionButtons
+                        onEdit={() => openEditModal(product)}
+                        onDelete={() => handleDelete(product.id)}
+                        showDelete={showDeleteButtons}
+                      />
                     </td>
                   </tr>
                 ))
