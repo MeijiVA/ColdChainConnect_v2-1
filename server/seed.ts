@@ -8,6 +8,7 @@ import {
   drivers,
   trucks,
   inventory_batches,
+  agents,
 } from "./db/schema";
 import { hashPassword } from "./auth";
 
@@ -180,6 +181,46 @@ async function seed() {
       },
     ]);
 
+    // Create agents
+    console.log("📝 Creating agents...");
+    await db.insert(agents).values([
+      {
+        id: randomUUID(),
+        name: "Maria Santos",
+        email: "maria.santos@coldchain.com",
+        phone: "09171234567",
+        is_active: true,
+      },
+      {
+        id: randomUUID(),
+        name: "Juan Dela Cruz",
+        email: "juan.delacruz@coldchain.com",
+        phone: "09172345678",
+        is_active: true,
+      },
+      {
+        id: randomUUID(),
+        name: "Ana Reyes",
+        email: "ana.reyes@coldchain.com",
+        phone: "09173456789",
+        is_active: true,
+      },
+      {
+        id: randomUUID(),
+        name: "Pedro Garcia",
+        email: "pedro.garcia@coldchain.com",
+        phone: "09174567890",
+        is_active: true,
+      },
+      {
+        id: randomUUID(),
+        name: "Rosa Lim",
+        email: "rosa.lim@coldchain.com",
+        phone: "09175678901",
+        is_active: false,
+      },
+    ]);
+
     // Create inventory batches
     console.log("📝 Creating inventory batches...");
     await db.insert(inventory_batches).values([
@@ -225,6 +266,7 @@ async function seed() {
     console.log("   ✓ 3 Customers (Makati, BGC, Tagaytay)");
     console.log("   ✓ 3 Drivers (with profiles)");
     console.log("   ✓ 3 Trucks (Metro Manila, Cavite, Tagaytay)");
+    console.log("   ✓ 5 Agents (Sales representatives)");
     console.log("   ✓ 4 Inventory Batches/Pallets");
 
     process.exit(0);
