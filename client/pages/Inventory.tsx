@@ -137,12 +137,8 @@ export function Inventory() {
   const getReorderStatus = (qty: number, reorderPoint: number) => qty <= reorderPoint ? "RE-ORDER" : "OK";
 
   const createNewBatch = async (pallets: any[], batchName: string) => {
-    // After pallet rows are saved to DB, refresh batches from DB so the
-    // new named batch appears with the correct DB-derived id.
+    // Refresh batches from DB after successful creation
     await refreshBatchesFromDB();
-    // Select the newly created batch by its DB-derived id
-    const newId = `db-batch-${batchName.toLowerCase().replace(/\s+/g, "-")}`;
-    setSelectedBatchId(newId);
     setNewBatchName("");
     setIsBatchModalOpen(false);
   };
@@ -679,15 +675,20 @@ function CreateBatchForm({ newBatchName, setNewBatchName, pallets, setPallets, o
     }
     const token = localStorage.getItem("auth_token") || "";
     try {
-      await fetch("/api/batches", {
+      const res = await fetch("/api/batches", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ batch_name: newBatchName, pallets }),
       });
-      onCreateBatch();
+      if (!res.ok) {
+        const error = await res.json();
+        alert("Failed to create batch: " + (error.error || "Unknown error"));
+        return;
+      }
+      onCreateBatch(newBatchName);
     } catch (err) {
       console.error("Failed to create batch:", err);
-      alert("Failed to create batch");
+      alert("Failed to create batch: " + String(err));
     }
   };
 
