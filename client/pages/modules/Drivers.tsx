@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { RefreshCw } from "lucide-react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { ActionButtons } from "@/components/ActionButtons";
 import { Driver } from "@shared/api";
 
 interface DriversProps {
@@ -125,6 +126,7 @@ export function Drivers({ onBack }: DriversProps) {
   });
   const { token } = useAuth();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
 
   const itemsPerPage = 10;
 
