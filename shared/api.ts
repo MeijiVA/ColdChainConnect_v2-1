@@ -119,6 +119,7 @@ export interface Driver {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  user?: User;
 }
 
 // Agent types
@@ -178,6 +179,9 @@ export interface Booking {
   status: "pending" | "approved" | "prep" | "ready";
   created_at: string;
   updated_at: string;
+  customer?: Customer;
+  driver?: Driver & { user?: User };
+  booking_items?: BookingItem[];
 }
 
 export interface BookingItem {

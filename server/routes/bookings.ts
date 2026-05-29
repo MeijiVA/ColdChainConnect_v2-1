@@ -21,6 +21,12 @@ export const listBookings: RequestHandler = async (req, res) => {
       where: whereClause,
       with: {
         booking_items: true,
+        customer: true,
+        driver: {
+          with: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -68,6 +74,12 @@ export const createBooking: RequestHandler = async (
       where: eq(bookings.id, bookingId),
       with: {
         booking_items: true,
+        customer: true,
+        driver: {
+          with: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -122,6 +134,12 @@ export const updateBookingStatus: RequestHandler = async (
       where: eq(bookings.id, id),
       with: {
         booking_items: true,
+        customer: true,
+        driver: {
+          with: {
+            user: true,
+          },
+        },
       },
     });
 

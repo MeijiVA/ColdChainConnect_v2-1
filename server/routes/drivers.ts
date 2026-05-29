@@ -8,7 +8,11 @@ import { logAction } from "../middleware/audit-logger";
 
 export const listDrivers: RequestHandler = async (_req, res) => {
   try {
-    const allDrivers = await db.query.drivers.findMany();
+    const allDrivers = await db.query.drivers.findMany({
+      with: {
+        user: true,
+      },
+    });
     res.json(allDrivers);
   } catch (error) {
     console.error("Error fetching drivers:", error);

@@ -208,7 +208,7 @@ export function BookingSummary() {
           <TableHeader>
             <TableRow>
               <TableHead>Order ID</TableHead>
-              <TableHead>Customer ID</TableHead>
+              <TableHead>Customer</TableHead>
               <TableHead>Driver</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Created</TableHead>
@@ -224,17 +224,29 @@ export function BookingSummary() {
               </TableRow>
             ) : (
               filtered.map((booking) => {
-                const assignedDriver = drivers.find((d) => d.id === booking.driver_id);
+                const customer = booking.customer;
+                const driver = booking.driver;
                 return (
                   <TableRow key={booking.id}>
                     <TableCell className="font-mono text-sm">{booking.id.slice(0, 8)}</TableCell>
-                    <TableCell>{booking.customer_id.slice(0, 8)}</TableCell>
                     <TableCell className="text-sm">
-                      {assignedDriver ? (
+                      {customer ? (
                         <div className="flex flex-col">
-                          <span className="font-semibold text-navy">{assignedDriver.id.slice(0, 8)}</span>
-                          {assignedDriver.contact_info && (
-                            <span className="text-xs text-muted">{assignedDriver.contact_info}</span>
+                          <span className="font-semibold text-navy">{customer.store_name}</span>
+                          {customer.contact_info && (
+                            <span className="text-xs text-muted">{customer.contact_info}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted">Unknown customer</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {driver ? (
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-navy">{driver.user?.username || driver.id.slice(0, 8)}</span>
+                          {driver.contact_info && (
+                            <span className="text-xs text-muted">{driver.contact_info}</span>
                           )}
                         </div>
                       ) : (
@@ -300,7 +312,7 @@ export function BookingSummary() {
                     .filter((d) => d.is_active)
                     .map((driver) => (
                       <option key={driver.id} value={driver.id}>
-                        {driver.id.slice(0, 8)} {driver.contact_info && `— ${driver.contact_info}`}
+                        {driver.user?.username || driver.id.slice(0, 8)} {driver.contact_info && `— ${driver.contact_info}`}
                       </option>
                     ))}
                 </select>
