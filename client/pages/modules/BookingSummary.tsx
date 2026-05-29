@@ -294,9 +294,12 @@ export function BookingSummary() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-navy mb-1">Customer ID</label>
-                <div className="px-3 py-2 bg-off-white rounded-lg text-sm text-navy">
-                  {selectedBooking.customer_id.slice(0, 8)}
+                <label className="block text-xs font-semibold text-navy mb-1">Customer</label>
+                <div className="flex flex-col px-3 py-2 bg-off-white rounded-lg text-sm text-navy">
+                  <span className="font-semibold">{selectedBooking.customer?.store_name || "Unknown"}</span>
+                  {selectedBooking.customer?.contact_info && (
+                    <span className="text-xs text-muted">{selectedBooking.customer.contact_info}</span>
+                  )}
                 </div>
               </div>
 
