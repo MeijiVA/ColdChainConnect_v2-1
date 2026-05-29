@@ -136,7 +136,6 @@ export interface Agent {
   name: string;
   email: string;
   phone?: string;
-  role: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -146,7 +145,6 @@ export const CreateAgentSchema = z.object({
   name: z.string().min(1, "Name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().optional(),
-  role: z.string().min(1, "Role is required"),
   is_active: z.boolean().default(true),
 });
 

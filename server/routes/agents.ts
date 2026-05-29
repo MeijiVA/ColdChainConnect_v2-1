@@ -17,10 +17,10 @@ export const listAgents: RequestHandler = async (_req, res) => {
 };
 
 export const createAgent: RequestHandler = async (req: AuthRequest, res) => {
-  const { name, email, phone, role } = req.body;
+  const { name, email, phone } = req.body;
 
-  if (!name || !email || !role) {
-    return res.status(400).json({ error: "Name, email, and role are required" });
+  if (!name || !email) {
+    return res.status(400).json({ error: "Name and email are required" });
   }
 
   try {
@@ -30,7 +30,6 @@ export const createAgent: RequestHandler = async (req: AuthRequest, res) => {
       name,
       email,
       phone,
-      role,
       is_active: true,
     });
 
@@ -58,7 +57,7 @@ export const createAgent: RequestHandler = async (req: AuthRequest, res) => {
 
 export const updateAgent: RequestHandler = async (req: AuthRequest, res) => {
   const { id } = req.params;
-  const { name, email, phone, role, is_active } = req.body;
+  const { name, email, phone, is_active } = req.body;
 
   try {
     const existing = await db.query.agents.findFirst({
@@ -75,7 +74,6 @@ export const updateAgent: RequestHandler = async (req: AuthRequest, res) => {
         name: name ?? existing.name,
         email: email ?? existing.email,
         phone: phone ?? existing.phone,
-        role: role ?? existing.role,
         is_active: is_active ?? existing.is_active,
         updated_at: new Date(),
       })

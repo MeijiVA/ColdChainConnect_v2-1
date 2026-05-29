@@ -8,7 +8,6 @@ interface AgentForm {
   name: string;
   email: string;
   phone: string;
-  role: string;
   is_active: boolean;
 }
 
@@ -85,32 +84,6 @@ function AgentModal({
               placeholder="e.g., 09171234567"
             />
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-navy mb-1">Role</label>
-            <select
-              value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
-            >
-              <option value="">Select a role</option>
-              <option value="Manager">Manager</option>
-              <option value="Supervisor">Supervisor</option>
-              <option value="Agent">Agent</option>
-              <option value="Coordinator">Coordinator</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={formData.is_active}
-              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-              className="w-4 h-4 accent-navy"
-            />
-            <label htmlFor="is_active" className="text-sm font-semibold text-navy">
-              Active Agent
-            </label>
-          </div>
         </div>
 
         <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end gap-2 border-t border-border rounded-b-2xl">
@@ -144,7 +117,6 @@ export function Agents() {
     name: "",
     email: "",
     phone: "",
-    role: "",
     is_active: true,
   });
   const { token } = useAuth();
@@ -198,7 +170,7 @@ export function Agents() {
 
   const openAddModal = () => {
     setEditingAgent(null);
-    setFormData({ name: "", email: "", phone: "", role: "", is_active: true });
+    setFormData({ name: "", email: "", phone: "", is_active: true });
     setIsModalOpen(true);
   };
 
@@ -208,7 +180,6 @@ export function Agents() {
       name: agent.name ?? "",
       email: agent.email ?? "",
       phone: agent.phone ?? "",
-      role: agent.role ?? "",
       is_active: agent.is_active ?? true,
     });
     setIsModalOpen(true);
@@ -249,6 +220,24 @@ export function Agents() {
       setAgents(agents.filter((a) => a.id !== id));
     } catch {
       alert("Failed to delete agent");
+    }
+  };
+
+  const handleToggleActive = async (agent: Agent) => {
+    try {
+      const response = await fetch(`/api/agents/${agent.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ is_active: !agent.is_active }),
+      });
+      if (!response.ok) throw new Error("Failed to update agent");
+      const updated = await response.json();
+      setAgents(agents.map((a) => (a.id === updated.id ? updated : a)));
+    } catch {
+      alert("Failed to update agent");
     }
   };
 
@@ -334,16 +323,16 @@ export function Agents() {
             <thead>
               <tr>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
-                  Status
-                </th>
-                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
                   Name
                 </th>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap hidden md:table-cell">
                   Email
                 </th>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
-                  Role
+                  Phone
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Status
                 </th>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
                   Actions
@@ -363,25 +352,33 @@ export function Agents() {
                     key={agent.id}
                     className="border-b border-border hover:bg-off-white/50 transition-colors"
                   >
+                    <td className="px-3 py-3 text-navy font-semibold">
+                      {agent.name || <span className="text-muted">—</span>}
+                    </td>
+                    <td className="px-3 py-3 text-navy hidden md:table-cell text-xs">
+                      {agent.email || <span className="text-muted">—</span>}
+                    </td>
+                    <td className="px-3 py-3 text-navy text-xs">
+                      {agent.phone || <span className="text-muted">—</span>}
+                    </td>
                     <td className="px-3 py-3 whitespace-nowrap">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${agent.is_active ? "badge-green" : "badge-red"
                         }`}>
                         {agent.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-navy font-semibold">
-                      {agent.name || <span className="text-muted">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-navy hidden md:table-cell">
-                      {agent.email || <span className="text-muted">—</span>}
-                    </td>
-                    <td className="px-3 py-3 text-navy text-xs">
-                      <span className="inline-block px-2 py-1 bg-off-white rounded border border-border">
-                        {agent.role || "—"}
-                      </span>
-                    </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => handleToggleActive(agent)}
+                          className={`px-3 py-1 border rounded-lg text-xs font-semibold transition-colors ${
+                            agent.is_active
+                              ? "border-red/30 text-red hover:bg-red/10"
+                              : "border-green/30 text-green hover:bg-green/10"
+                          }`}
+                        >
+                          {agent.is_active ? "🔒 Disable" : "🔓 Enable"}
+                        </button>
                         <button
                           onClick={() => openEditModal(agent)}
                           className="px-3 py-1 border border-border rounded-lg text-xs font-semibold text-navy hover:bg-off-white transition-colors"

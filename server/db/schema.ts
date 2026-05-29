@@ -110,7 +110,6 @@ export const agents = pgTable("agents", {
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   phone: text("phone"),
-  role: text("role").notNull(),
   is_active: boolean("is_active").default(true),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
