@@ -1,0 +1,458 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "../../hooks/useAuth";
+import { RefreshCw } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
+
+interface Agent {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  is_active: boolean;
+  created_at?: string;
+}
+
+interface AgentForm {
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  is_active: boolean;
+}
+
+function StatsBox({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  icon: string;
+  color?: string;
+}) {
+  const colorClass = color ? `text-${color}` : "text-accent-2";
+  return (
+    <div className="bg-white border border-border rounded-lg p-3 text-center">
+      <div className="text-2xl mb-1">{icon}</div>
+      <div className={`font-rajdhani text-xl font-bold ${colorClass}`}>{value}</div>
+      <div className="text-xs text-muted mt-1">{label}</div>
+    </div>
+  );
+}
+
+function AgentModal({
+  title,
+  formData,
+  setFormData,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  formData: AgentForm;
+  setFormData: (data: AgentForm) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">{title}</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Name</label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+              placeholder="e.g., John Doe"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Email</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+              placeholder="e.g., john@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Phone</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+              placeholder="e.g., 09171234567"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-navy mb-1">Role</label>
+            <select
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+            >
+              <option value="">Select a role</option>
+              <option value="Manager">Manager</option>
+              <option value="Supervisor">Supervisor</option>
+              <option value="Agent">Agent</option>
+              <option value="Coordinator">Coordinator</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={formData.is_active}
+              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+              className="w-4 h-4 accent-navy"
+            />
+            <label htmlFor="is_active" className="text-sm font-semibold text-navy">
+              Active Agent
+            </label>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end gap-2 border-t border-border rounded-b-2xl">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-border rounded-lg font-semibold text-sm hover:bg-white"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSave}
+            className="px-4 py-2 bg-accent-2 text-white rounded-lg font-semibold text-sm hover:opacity-90"
+          >
+            Save Agent
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function Agents() {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [formData, setFormData] = useState<AgentForm>({
+    name: "",
+    email: "",
+    phone: "",
+    role: "",
+    is_active: true,
+  });
+  const { token } = useAuth();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const itemsPerPage = 10;
+
+  const fetchAgents = async () => {
+    try {
+      const response = await fetch("/api/agents", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Failed to fetch agents");
+      const data = await response.json();
+      setAgents(data);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error loading agents");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAgents();
+    setIsRefreshing(false);
+  };
+
+  useEffect(() => {
+    if (token) {
+      fetchAgents();
+    }
+  }, [token]);
+
+  const filteredAgents = agents.filter(
+    (a) =>
+      a.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredAgents.length / itemsPerPage);
+  const paginatedAgents = filteredAgents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const activeCount = agents.filter((a) => a.is_active).length;
+  const inactiveCount = agents.length - activeCount;
+
+  const openAddModal = () => {
+    setEditingAgent(null);
+    setFormData({ name: "", email: "", phone: "", role: "", is_active: true });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (agent: Agent) => {
+    setEditingAgent(agent);
+    setFormData({
+      name: agent.name ?? "",
+      email: agent.email ?? "",
+      phone: agent.phone ?? "",
+      role: agent.role ?? "",
+      is_active: agent.is_active ?? true,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      const url = editingAgent ? `/api/agents/${editingAgent.id}` : "/api/agents";
+      const method = editingAgent ? "PATCH" : "POST";
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(formData),
+      });
+      if (!response.ok) throw new Error("Failed to save agent");
+      const saved = await response.json();
+      if (editingAgent) {
+        setAgents(agents.map((a) => (a.id === saved.id ? saved : a)));
+      } else {
+        setAgents([...agents, saved]);
+      }
+      setIsModalOpen(false);
+    } catch {
+      alert("Failed to save agent");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this agent?")) return;
+    try {
+      await fetch(`/api/agents/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAgents(agents.filter((a) => a.id !== id));
+    } catch {
+      alert("Failed to delete agent");
+    }
+  };
+
+  if (isLoading && !isRefreshing) {
+    return (
+      <div className="flex-1 px-4 md:px-6 lg:px-7 py-4 md:py-6">
+        <div className="text-muted text-sm">Loading agents...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 px-4 md:px-6 lg:px-7 py-4 md:py-6 overflow-y-auto scrollbar-visible space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="font-rajdhani text-3xl font-bold text-navy letter-spacing-tight">
+            Agent Management
+          </h1>
+          <p className="text-xs text-muted mt-1">
+            Manage agents and field staff
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-off-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            title="Refresh data"
+          >
+            <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
+            Refresh
+          </button>
+          <button className="px-4 py-2 bg-white border border-border text-navy rounded-lg font-semibold text-sm hover:bg-off-white transition-colors">
+            ⬇ Import Excel
+          </button>
+          <button className="px-4 py-2 bg-white border border-border text-navy rounded-lg font-semibold text-sm hover:bg-off-white transition-colors">
+            ⬆ Export Excel
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red/10 border border-red/30 text-red rounded-lg px-4 py-3 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatsBox label="Total Agents" value={agents.length.toString()} icon="👥" />
+        <StatsBox label="Active" value={activeCount.toString()} icon="✅" />
+        <StatsBox label="Inactive" value={inactiveCount.toString()} icon="⛔" color="red" />
+        <StatsBox
+          label="With Email"
+          value={agents.filter((a) => a.email).length.toString()}
+          icon="📧"
+        />
+      </div>
+
+      {/* Search + Add */}
+      <div className="flex flex-col md:flex-row gap-3">
+        <SearchFilterBar
+          searchTerm={searchQuery}
+          onSearchChange={(value) => {
+            setSearchQuery(value);
+            setCurrentPage(1);
+          }}
+          placeholder="Search by name, email, or phone…"
+        />
+        <button
+          onClick={openAddModal}
+          className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2 w-fit"
+        >
+          ➕ Add Agent
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-2xl border border-border overflow-hidden">
+        <div className="overflow-x-auto scrollbar-visible text-xs md:text-sm">
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Status
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Name
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap hidden md:table-cell">
+                  Email
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Role
+                </th>
+                <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedAgents.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-3 py-6 text-center text-muted">
+                    {agents.length === 0 ? "No agents found" : "No results matching your search"}
+                  </td>
+                </tr>
+              ) : (
+                paginatedAgents.map((agent) => (
+                  <tr
+                    key={agent.id}
+                    className="border-b border-border hover:bg-off-white/50 transition-colors"
+                  >
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${agent.is_active ? "badge-green" : "badge-red"
+                        }`}>
+                        {agent.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-navy font-semibold">
+                      {agent.name || <span className="text-muted">—</span>}
+                    </td>
+                    <td className="px-3 py-3 text-navy hidden md:table-cell">
+                      {agent.email || <span className="text-muted">—</span>}
+                    </td>
+                    <td className="px-3 py-3 text-navy text-xs">
+                      <span className="inline-block px-2 py-1 bg-off-white rounded border border-border">
+                        {agent.role || "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openEditModal(agent)}
+                          className="px-3 py-1 border border-border rounded-lg text-xs font-semibold text-navy hover:bg-off-white transition-colors"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(agent.id)}
+                          className="px-3 py-1 border border-red/30 rounded-lg text-xs font-semibold text-red hover:bg-red/10 transition-colors"
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-off-white/50">
+            <span className="text-xs text-muted">
+              Showing {(currentPage - 1) * itemsPerPage + 1}–
+              {Math.min(currentPage * itemsPerPage, filteredAgents.length)} of{" "}
+              {filteredAgents.length} agents
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
+              >
+                ← Prev
+              </button>
+              <span className="px-3 py-1 text-xs font-semibold text-navy">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="text-xs text-muted">Total agents: {filteredAgents.length}</div>
+
+      {isModalOpen && (
+        <AgentModal
+          title={editingAgent ? "Edit Agent" : "Add New Agent"}
+          formData={formData}
+          setFormData={setFormData}
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSave}
+        />
+      )}
+    </div>
+  );
+}
