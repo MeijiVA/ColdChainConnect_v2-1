@@ -450,6 +450,13 @@ export function Drivers({ onBack }: DriversProps) {
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto scrollbar-visible text-xs md:text-sm">
           <table className="w-full">
+            <colgroup>
+              <col style={{ width: '100px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '200px' }} className="hidden md:table-cell" />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '120px' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">

@@ -320,6 +320,15 @@ export function Inventory() {
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto scrollbar-visible text-xs">
           <table className="w-full">
+            <colgroup>
+              <col style={{ width: '100px' }} />
+              <col style={{ width: '180px' }} />
+              <col style={{ width: '140px' }} />
+              <col style={{ width: '120px' }} />
+              <col style={{ width: '130px' }} />
+              <col style={{ width: '160px' }} />
+              <col style={{ width: '120px' }} />
+            </colgroup>
             <thead>
               <tr>
                 {["Reorder", "Name", "Cost Per Item", "Stock Qty", "Reorder Level", "Item Discontinued?"].map((col) => (
