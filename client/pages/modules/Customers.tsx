@@ -480,14 +480,6 @@ export function Customers({ onBack }: CustomersProps) {
       <div className="overflow-hidden rounded-2xl border border-border bg-white">
         <div className="overflow-x-auto text-xs md:text-sm">
           <table className="w-full">
-            <colgroup>
-              <col style={{ width: '180px' }} />
-              <col style={{ width: '150px' }} />
-              <col style={{ width: '180px' }} className="hidden md:table-cell" />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '120px' }} />
-              <col style={{ width: '120px' }} />
-            </colgroup>
             <thead>
               <tr>
                 <th className="border-b border-border bg-navy-mid px-3 py-3 text-left font-barlow-cond text-xs font-bold uppercase tracking-wider text-muted whitespace-nowrap">
@@ -505,7 +497,7 @@ export function Customers({ onBack }: CustomersProps) {
                 <th className="border-b border-border bg-navy-mid px-3 py-3 text-left font-barlow-cond text-xs font-bold uppercase tracking-wider text-muted whitespace-nowrap">
                   Tax Rate
                 </th>
-                <th className="sticky right-0 z-10 border-b border-border bg-navy-mid px-3 py-3 text-center font-barlow-cond text-xs font-bold uppercase tracking-wider text-muted whitespace-nowrap shadow-left">
+                <th style={{ width: '120px' }} className="sticky right-0 z-10 border-b border-border bg-navy-mid px-3 py-3 text-center font-barlow-cond text-xs font-bold uppercase tracking-wider text-muted whitespace-nowrap shadow-left">
                   Actions
                 </th>
               </tr>
@@ -550,7 +542,7 @@ export function Customers({ onBack }: CustomersProps) {
                         <span className="text-muted">—</span>
                       )}
                     </td>
-                    <td className="sticky right-0 z-10 px-3 py-3 bg-white border-l border-border shadow-left">
+                    <td style={{ width: '120px' }} className="sticky right-0 z-10 px-3 py-3 bg-white border-l border-border shadow-left">
                       <ActionButtons
                         onView={() => setViewingCustomer(customer)}
                         onEdit={() => openEditModal(customer)}

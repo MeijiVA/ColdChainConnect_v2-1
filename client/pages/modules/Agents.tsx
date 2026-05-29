@@ -371,13 +371,6 @@ export function Agents() {
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto scrollbar-visible text-xs md:text-sm">
           <table className="w-full">
-            <colgroup>
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '200px' }} className="hidden md:table-cell" />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '110px' }} />
-              <col style={{ width: '120px' }} />
-            </colgroup>
             <thead>
               <tr>
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
@@ -392,7 +385,7 @@ export function Agents() {
                 <th className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
                   Status
                 </th>
-                <th className="sticky right-0 z-10 bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-center border-b border-border whitespace-nowrap shadow-left">
+                <th style={{ width: '120px' }} className="sticky right-0 z-10 bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-center border-b border-border whitespace-nowrap shadow-left">
                   Actions
                 </th>
               </tr>
@@ -425,7 +418,7 @@ export function Agents() {
                         {agent.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="sticky right-0 z-10 px-3 py-3 bg-white border-l border-border shadow-left">
+                    <td style={{ width: '120px' }} className="sticky right-0 z-10 px-3 py-3 bg-white border-l border-border shadow-left">
                       <ActionButtons
                         onView={() => setViewingAgent(agent)}
                         onEdit={() => openEditModal(agent)}

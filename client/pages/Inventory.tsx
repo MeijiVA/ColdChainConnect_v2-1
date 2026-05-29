@@ -320,15 +320,6 @@ export function Inventory() {
       <div className="bg-white rounded-2xl border border-border overflow-hidden">
         <div className="overflow-x-auto scrollbar-visible text-xs">
           <table className="w-full">
-            <colgroup>
-              <col style={{ width: '100px' }} />
-              <col style={{ width: '180px' }} />
-              <col style={{ width: '140px' }} />
-              <col style={{ width: '120px' }} />
-              <col style={{ width: '130px' }} />
-              <col style={{ width: '160px' }} />
-              <col style={{ width: '120px' }} />
-            </colgroup>
             <thead>
               <tr>
                 {["Reorder", "Name", "Cost Per Item", "Stock Qty", "Reorder Level", "Item Discontinued?"].map((col) => (
@@ -336,7 +327,7 @@ export function Inventory() {
                     {col}
                   </th>
                 ))}
-                <th className="sticky right-0 z-10 bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-center border-b border-border whitespace-nowrap shadow-left">
+                <th style={{ width: '120px' }} className="sticky right-0 z-10 bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-center border-b border-border whitespace-nowrap shadow-left">
                   Actions
                 </th>
               </tr>
@@ -374,7 +365,7 @@ export function Inventory() {
                         </span>
                       </td>
                       {/* Actions */}
-                      <td className="sticky right-0 z-10 px-3 py-3 whitespace-nowrap bg-white border-l border-border shadow-left">
+                      <td style={{ width: '120px' }} className="sticky right-0 z-10 px-3 py-3 whitespace-nowrap bg-white border-l border-border shadow-left">
                         <ActionButtons
                           onView={() => setExtraInfoProduct(product)}
                           onEdit={() => handleEdit(product)}
