@@ -333,7 +333,7 @@ export function Inventory() {
           <table className="w-full">
             <thead>
               <tr>
-                {["Reorder", "Name", "Cost Per Item", "Stock Qty", "Reorder Level", "Item Discontinued?", "Expiry Date"].map((col) => (
+                {["Reorder", "Name", "Cost Per Item", "Stock Qty", ...(selectedBatchId === "batch-all" ? ["Reorder Level"] : []), "Item Discontinued?", "Expiry Date"].map((col) => (
                   <th key={col} className="bg-navy-mid text-muted font-barlow-cond text-xs font-bold letter-spacing-wider uppercase px-3 py-3 text-left border-b border-border whitespace-nowrap">
                     {col}
                   </th>
@@ -345,7 +345,7 @@ export function Inventory() {
             </thead>
             <tbody>
               {paginatedBatchProducts.length === 0 ? (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted">No products in this batch</td></tr>
+                <tr><td colSpan={selectedBatchId === "batch-all" ? 8 : 7} className="px-3 py-6 text-center text-muted">No products in this batch</td></tr>
               ) : (
                 paginatedBatchProducts.map((product) => {
                   const isReorder = getReorderStatus(product.batchQuantity, product.reorderPoint) === "RE-ORDER";
@@ -368,8 +368,25 @@ export function Inventory() {
                           {product.batchQuantity.toLocaleString()}
                         </span>
                       </td>
-                      {/* Reorder Level */}
-                      <td className="px-3 py-3 text-navy whitespace-nowrap">{product.reorderPoint}</td>
+                      {/* Reorder Level - Only show in All Products view */}
+                      {selectedBatchId === "batch-all" && (
+                        <td className="px-3 py-3 text-navy whitespace-nowrap">
+                          <input
+                            type="number"
+                            min="0"
+                            value={product.reorderPoint}
+                            onChange={(e) => {
+                              const updated = [...paginatedBatchProducts];
+                              const idx = updated.findIndex(p => (p.itemId ? `${p.id}-${p.itemId}` : p.id) === (product.itemId ? `${product.id}-${product.itemId}` : product.id));
+                              if (idx >= 0) {
+                                updated[idx] = { ...updated[idx], reorderPoint: parseInt(e.target.value) || 0 };
+                                // You can add save logic here if needed
+                              }
+                            }}
+                            className="w-16 px-2 py-1 border border-border rounded text-sm focus:outline-none focus:border-accent-2"
+                          />
+                        </td>
+                      )}
                       {/* Item Discontinued */}
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.isDiscontinued ? "bg-red text-white" : "bg-green text-white"}`}>
