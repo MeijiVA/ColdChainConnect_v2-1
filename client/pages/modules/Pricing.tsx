@@ -171,6 +171,49 @@ function ProductModal({
   );
 }
 
+function ViewProductModal({ product, onClose }: { product: Product; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Product Details</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {product.image_filename && (
+            <div className="w-full bg-off-white rounded-lg p-4 text-center">
+              <img src={`/uploads/${product.image_filename}`} alt={product.name} className="max-w-full h-auto mx-auto max-h-64" />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Product Name</label>
+            <div className="text-sm text-navy font-semibold">{product.name}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">SKU Code</label>
+            <div className="text-sm text-navy">{product.sku || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Unit Price</label>
+            <div className="text-sm text-navy font-semibold">₱{parseFloat(product.price ?? "0").toLocaleString("en-PH", { minimumFractionDigits: 2 })}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Batch Tracking</label>
+            <div className="text-sm"><span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.batch_tracking_enabled ? "badge-green" : "badge-red"}`}>{product.batch_tracking_enabled ? "Enabled" : "Disabled"}</span></div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end border-t border-border rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Pricing({ onBack }: PricingProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -181,6 +224,7 @@ export function Pricing({ onBack }: PricingProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showDeleteButtons, setShowDeleteButtons] = useState(false);
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductForm>({
     name: "",
     sku: "",
@@ -446,6 +490,7 @@ export function Pricing({ onBack }: PricingProps) {
                     </td>
                     <td className="px-3 py-3">
                       <ActionButtons
+                        onView={() => setViewingProduct(product)}
                         onEdit={() => openEditModal(product)}
                         onDelete={() => handleDelete(product.id)}
                         showDelete={showDeleteButtons}
@@ -459,40 +504,22 @@ export function Pricing({ onBack }: PricingProps) {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="px-4 py-3 border-t border-border flex items-center justify-between bg-off-white/50">
-            <span className="text-xs text-muted">
-              Showing {(currentPage - 1) * itemsPerPage + 1}–
-              {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of{" "}
-              {filteredProducts.length} products
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
-              >
-                ← Prev
-              </button>
-              <span className="px-3 py-1 text-xs font-semibold text-navy">
-                {currentPage} / {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 border border-border rounded text-xs font-semibold hover:bg-white disabled:opacity-40"
-              >
-                Next →
-              </button>
-            </div>
+        <div className="flex items-center justify-between px-6 py-4 border-t border-border">
+          <div className="text-xs text-muted">Page {currentPage} of {Math.max(1, totalPages)} · {filteredProducts.length} products</div>
+          <div className="flex gap-2">
+            <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="px-3 py-1 border border-border rounded text-xs font-semibold disabled:opacity-50">← Prev</button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).slice(Math.max(0, currentPage - 2), currentPage + 1).map((page) => (
+              <button key={page} onClick={() => setCurrentPage(page)} className={`px-3 py-1 rounded text-xs font-semibold ${page === currentPage ? "bg-accent-2 text-white" : "border border-border hover:bg-off-white"}`}>{page}</button>
+            ))}
+            <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="px-3 py-1 border border-border rounded text-xs font-semibold disabled:opacity-50">Next →</button>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Footer count */}
-      <div className="text-xs text-muted">
-        Total products: {filteredProducts.length}
-      </div>
+      {/* View Modal */}
+      {viewingProduct && (
+        <ViewProductModal product={viewingProduct} onClose={() => setViewingProduct(null)} />
+      )}
 
       {/* Modal */}
       {isModalOpen && (
