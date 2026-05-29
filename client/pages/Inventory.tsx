@@ -618,7 +618,7 @@ function CreateBatchForm({ newBatchName, setNewBatchName, pallets, setPallets, o
   const getSku = (id: string) => dbProducts.find((p) => p.id === id)?.sku || products.find((p) => p.id === id)?.sku || "";
 
   const addPallet = () => {
-    setPallets([...pallets, { pallet_id: "", supplier_name: "", received_date: "", temperature_log: "", storage_zone: "", placement_location: "", items: [] }]);
+    setPallets([...pallets, { pallet_id: "", supplier_name: "Frabelle Food Corp", received_date: "", temperature_log: "", storage_zone: "", placement_location: "", items: [] }]);
   };
 
   const removePallet = (idx: number) => {
@@ -697,7 +697,7 @@ function CreateBatchForm({ newBatchName, setNewBatchName, pallets, setPallets, o
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-navy mb-1">Supplier</label>
-                    <input type="text" value={pallet.supplier_name || ""} onChange={(e) => updatePallet(palletIdx, "supplier_name", e.target.value)} placeholder="Supplier name" className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2" />
+                    <input type="text" value={pallet.supplier_name || ""} readOnly className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-off-white text-muted cursor-not-allowed" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-navy mb-1">Received Date</label>
