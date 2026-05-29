@@ -121,15 +121,6 @@ export interface Driver {
   updated_at: string;
 }
 
-export const CreateDriverSchema = z.object({
-  user_id: z.string().min(1, "User ID is required"),
-  address: z.string().optional(),
-  contact_info: z.string().optional(),
-  is_active: z.boolean().default(true),
-});
-
-export const UpdateDriverSchema = CreateDriverSchema.partial();
-
 // Agent types
 export interface Agent {
   id: string;
@@ -142,13 +133,22 @@ export interface Agent {
 }
 
 export const CreateAgentSchema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z.string().min(1, "Agent name is required"),
   email: z.string().email("Valid email is required"),
   phone: z.string().optional(),
   is_active: z.boolean().default(true),
 });
 
 export const UpdateAgentSchema = CreateAgentSchema.partial();
+
+export const CreateDriverSchema = z.object({
+  user_id: z.string().min(1, "User ID is required"),
+  address: z.string().optional(),
+  contact_info: z.string().optional(),
+  is_active: z.boolean().default(true),
+});
+
+export const UpdateDriverSchema = CreateDriverSchema.partial();
 
 // Truck types
 export interface Truck {

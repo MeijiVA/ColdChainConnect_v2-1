@@ -3,21 +3,23 @@ import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { agents } from "../db/schema";
-import { AuthRequest } from "../middleware/auth";
-import { logAction } from "../middleware/audit-logger";
+import { Agent } from "@shared/api";
 
-export const listAgents: RequestHandler = async (_req, res) => {
+export const listAgents: RequestHandler<{}, Agent[]> = async (req, res) => {
   try {
-    const allAgents = await db.query.agents.findMany();
-    res.json(allAgents);
+    const agentsList = await db.query.agents.findMany();
+    res.json(agentsList);
   } catch (error) {
-    console.error("Error fetching agents:", error);
+    console.error("List agents error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-export const createAgent: RequestHandler = async (req: AuthRequest, res) => {
-  const { name, email, phone } = req.body;
+export const createAgent: RequestHandler<{}, Agent | object> = async (
+  req,
+  res
+) => {
+  const { name, email, phone, is_active = true } = req.body;
 
   if (!name || !email) {
     return res.status(400).json({ error: "Name and email are required" });
@@ -25,110 +27,92 @@ export const createAgent: RequestHandler = async (req: AuthRequest, res) => {
 
   try {
     const id = randomUUID();
-    await db.insert(agents).values({
-      id,
-      name,
-      email,
-      phone,
-      is_active: true,
-    });
-
-    const newAgent = await db.query.agents.findFirst({
-      where: eq(agents.id, id),
-    });
-
-    if (req.user) {
-      await logAction(
-        req.user.userId,
-        "create",
-        "agent",
+    const newAgent = await db
+      .insert(agents)
+      .values({
         id,
-        undefined,
-        newAgent
-      );
-    }
+        name,
+        email,
+        phone,
+        is_active,
+      })
+      .returning();
 
-    res.status(201).json(newAgent);
-  } catch (error) {
-    console.error("Error creating agent:", error);
+    res.status(201).json(newAgent[0]);
+  } catch (error: any) {
+    console.error("Create agent error:", error);
+    if (error.message?.includes("unique constraint")) {
+      return res.status(400).json({ error: "Email already exists" });
+    }
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-export const updateAgent: RequestHandler = async (req: AuthRequest, res) => {
+export const updateAgent: RequestHandler<{ id: string }, Agent | object> = async (
+  req,
+  res
+) => {
   const { id } = req.params;
   const { name, email, phone, is_active } = req.body;
 
+  if (!id) {
+    return res.status(400).json({ error: "Agent ID is required" });
+  }
+
   try {
-    const existing = await db.query.agents.findFirst({
+    const agent = await db.query.agents.findFirst({
       where: eq(agents.id, id),
     });
 
-    if (!existing) {
+    if (!agent) {
       return res.status(404).json({ error: "Agent not found" });
     }
 
-    await db
+    const updated = await db
       .update(agents)
       .set({
-        name: name ?? existing.name,
-        email: email ?? existing.email,
-        phone: phone ?? existing.phone,
-        is_active: is_active ?? existing.is_active,
-        updated_at: new Date(),
+        name: name || agent.name,
+        email: email || agent.email,
+        phone: phone !== undefined ? phone : agent.phone,
+        is_active: is_active !== undefined ? is_active : agent.is_active,
       })
-      .where(eq(agents.id, id));
+      .where(eq(agents.id, id))
+      .returning();
 
-    const updated = await db.query.agents.findFirst({
-      where: eq(agents.id, id),
-    });
-
-    if (req.user) {
-      await logAction(
-        req.user.userId,
-        "update",
-        "agent",
-        id,
-        existing,
-        updated
-      );
+    res.json(updated[0]);
+  } catch (error: any) {
+    console.error("Update agent error:", error);
+    if (error.message?.includes("unique constraint")) {
+      return res.status(400).json({ error: "Email already exists" });
     }
-
-    res.json(updated);
-  } catch (error) {
-    console.error("Error updating agent:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
 
-export const deleteAgent: RequestHandler = async (req: AuthRequest, res) => {
+export const deleteAgent: RequestHandler<{ id: string }> = async (
+  req,
+  res
+) => {
   const { id } = req.params;
 
+  if (!id) {
+    return res.status(400).json({ error: "Agent ID is required" });
+  }
+
   try {
-    const existing = await db.query.agents.findFirst({
+    const agent = await db.query.agents.findFirst({
       where: eq(agents.id, id),
     });
 
-    if (!existing) {
+    if (!agent) {
       return res.status(404).json({ error: "Agent not found" });
     }
 
     await db.delete(agents).where(eq(agents.id, id));
 
-    if (req.user) {
-      await logAction(
-        req.user.userId,
-        "delete",
-        "agent",
-        id,
-        existing,
-        undefined
-      );
-    }
-
-    res.json({ message: "Agent deleted" });
+    res.json({ message: "Agent deleted successfully" });
   } catch (error) {
-    console.error("Error deleting agent:", error);
+    console.error("Delete agent error:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 };
