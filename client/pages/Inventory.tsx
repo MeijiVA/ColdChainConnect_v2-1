@@ -90,7 +90,9 @@ export function Inventory() {
     }
   };
 
-  useEffect(() => { fetchProductsFromApi(); }, []);
+  useEffect(() => {
+    fetchProductsFromApi();
+  }, [batches]);
 
   const currentBatch = batches.find((b) => b.id === selectedBatchId);
 
