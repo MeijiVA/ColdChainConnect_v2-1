@@ -47,6 +47,48 @@ function StatsBox({
   );
 }
 
+function ViewCustomerModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Customer Details</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Store Name</label>
+            <div className="text-sm text-navy font-semibold">{customer.store_name}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Location</label>
+            <div className="text-sm text-navy">{customer.location || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Contact Info</label>
+            <div className="text-sm text-navy">{customer.contact_info || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Payment Type</label>
+            <div className="text-sm text-navy">{customer.payment_type ? customer.payment_type.replace("_", " ").toUpperCase() : "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Tax Rate</label>
+            <div className="text-sm text-navy">{customer.tax_rate ? `${(Number(customer.tax_rate) * 100).toFixed(2)}%` : "—"}</div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end border-t border-border rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CustomerModal({
   title,
   formData,
@@ -187,6 +229,7 @@ export function Customers({ onBack }: CustomersProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [showDeleteButtons, setShowDeleteButtons] = useState(false);
+  const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState<CustomerForm>({
     store_name: "",
     location: "",
@@ -501,6 +544,7 @@ export function Customers({ onBack }: CustomersProps) {
                     </td>
                     <td className="px-3 py-3">
                       <ActionButtons
+                        onView={() => setViewingCustomer(customer)}
                         onEdit={() => openEditModal(customer)}
                         onDelete={() => handleDelete(customer.id)}
                         showDelete={showDeleteButtons}
@@ -546,6 +590,10 @@ export function Customers({ onBack }: CustomersProps) {
       <div className="text-xs text-muted">
         Total customers: {filteredCustomers.length}
       </div>
+
+      {viewingCustomer && (
+        <ViewCustomerModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} />
+      )}
 
       {isModalOpen && (
         <CustomerModal

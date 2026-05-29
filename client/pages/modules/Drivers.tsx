@@ -36,6 +36,44 @@ function StatsBox({
   );
 }
 
+function ViewDriverModal({ driver, onClose }: { driver: Driver; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Driver Details</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">User ID</label>
+            <div className="text-sm text-navy font-semibold">{driver.user_id}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Address</label>
+            <div className="text-sm text-navy">{driver.address || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Contact Info</label>
+            <div className="text-sm text-navy">{driver.contact_info || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Status</label>
+            <div className="text-sm"><span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${driver.is_active ? "badge-green" : "badge-red"}`}>{driver.is_active ? "Active" : "Inactive"}</span></div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end border-t border-border rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DriverModal({
   title,
   formData,
@@ -119,6 +157,7 @@ export function Drivers({ onBack }: DriversProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<Driver | null>(null);
+  const [viewingDriver, setViewingDriver] = useState<Driver | null>(null);
   const [formData, setFormData] = useState<DriverForm>({
     address: "",
     contact_info: "",
@@ -365,6 +404,7 @@ export function Drivers({ onBack }: DriversProps) {
                     </td>
                     <td className="px-3 py-3">
                       <ActionButtons
+                        onView={() => setViewingDriver(driver)}
                         onEdit={() => openEditModal(driver)}
                         onDelete={() => handleDelete(driver.id)}
                         showDelete={showDeleteButtons}
@@ -408,6 +448,10 @@ export function Drivers({ onBack }: DriversProps) {
       </div>
 
       <div className="text-xs text-muted">Total drivers: {filteredDrivers.length}</div>
+
+      {viewingDriver && (
+        <ViewDriverModal driver={viewingDriver} onClose={() => setViewingDriver(null)} />
+      )}
 
       {isModalOpen && (
         <DriverModal

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { RefreshCw } from "lucide-react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { ActionButtons } from "@/components/ActionButtons";
 import { Agent } from "@shared/api";
 
 interface AgentForm {
@@ -28,6 +29,44 @@ function StatsBox({
       <div className="text-2xl mb-1">{icon}</div>
       <div className={`font-rajdhani text-xl font-bold ${colorClass}`}>{value}</div>
       <div className="text-xs text-muted mt-1">{label}</div>
+    </div>
+  );
+}
+
+function ViewAgentModal({ agent, onClose }: { agent: Agent; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-border max-w-lg w-full">
+        <div className="sticky top-0 bg-navy-mid px-6 py-4 flex items-center justify-between border-b border-border rounded-t-2xl">
+          <h2 className="font-rajdhani text-lg font-bold text-white">Agent Details</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl">×</button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Name</label>
+            <div className="text-sm text-navy font-semibold">{agent.name || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Email</label>
+            <div className="text-sm text-navy">{agent.email || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Phone</label>
+            <div className="text-sm text-navy">{agent.phone || "—"}</div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-muted mb-1">Status</label>
+            <div className="text-sm"><span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${agent.is_active ? "badge-green" : "badge-red"}`}>{agent.is_active ? "Active" : "Inactive"}</span></div>
+          </div>
+        </div>
+
+        <div className="sticky bottom-0 bg-off-white px-6 py-4 flex justify-end border-t border-border rounded-b-2xl">
+          <button onClick={onClose} className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90">
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -113,6 +152,8 @@ export function Agents() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [viewingAgent, setViewingAgent] = useState<Agent | null>(null);
+  const [showDeleteButtons, setShowDeleteButtons] = useState(false);
   const [formData, setFormData] = useState<AgentForm>({
     name: "",
     email: "",
@@ -298,8 +339,8 @@ export function Agents() {
         />
       </div>
 
-      {/* Search + Add */}
-      <div className="flex flex-col md:flex-row gap-3">
+      {/* Search + Add + Delete Toggle */}
+      <div className="flex flex-col md:flex-row gap-3 items-stretch">
         <SearchFilterBar
           searchTerm={searchQuery}
           onSearchChange={(value) => {
@@ -313,6 +354,16 @@ export function Agents() {
           className="px-4 py-2 bg-navy text-white rounded-lg font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2 w-fit"
         >
           ➕ Add Agent
+        </button>
+        <button
+          onClick={() => setShowDeleteButtons(!showDeleteButtons)}
+          className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${
+            showDeleteButtons
+              ? "bg-red text-white hover:opacity-90"
+              : "bg-white border border-border text-navy hover:bg-off-white"
+          }`}
+        >
+          {showDeleteButtons ? "🔓 Delete Enabled" : "🔒 Enable Delete"}
         </button>
       </div>
 
@@ -368,30 +419,12 @@ export function Agents() {
                       </span>
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleToggleActive(agent)}
-                          className={`px-3 py-1 border rounded-lg text-xs font-semibold transition-colors ${
-                            agent.is_active
-                              ? "border-red/30 text-red hover:bg-red/10"
-                              : "border-green/30 text-green hover:bg-green/10"
-                          }`}
-                        >
-                          {agent.is_active ? "🔒 Disable" : "🔓 Enable"}
-                        </button>
-                        <button
-                          onClick={() => openEditModal(agent)}
-                          className="px-3 py-1 border border-border rounded-lg text-xs font-semibold text-navy hover:bg-off-white transition-colors"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(agent.id)}
-                          className="px-3 py-1 border border-red/30 rounded-lg text-xs font-semibold text-red hover:bg-red/10 transition-colors"
-                        >
-                          🗑️ Delete
-                        </button>
-                      </div>
+                      <ActionButtons
+                        onView={() => setViewingAgent(agent)}
+                        onEdit={() => openEditModal(agent)}
+                        onDelete={() => handleDelete(agent.id)}
+                        showDelete={showDeleteButtons}
+                      />
                     </td>
                   </tr>
                 ))
@@ -431,6 +464,10 @@ export function Agents() {
       </div>
 
       <div className="text-xs text-muted">Total agents: {filteredAgents.length}</div>
+
+      {viewingAgent && (
+        <ViewAgentModal agent={viewingAgent} onClose={() => setViewingAgent(null)} />
+      )}
 
       {isModalOpen && (
         <AgentModal
