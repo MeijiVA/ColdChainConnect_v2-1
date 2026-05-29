@@ -746,13 +746,19 @@ function CreateBatchForm({ newBatchName, setNewBatchName, pallets, setPallets, o
                     {pallet.items.map((item: any, itemIdx: number) => {
                       const product = products.find((p) => p.id === item.product_id);
                       return (
-                        <div key={itemIdx} className="bg-white border border-border rounded p-2 flex items-end gap-2">
-                          <div className="flex-1">
-                            <div className="text-xs font-semibold text-navy">{getName(item.product_id)}</div>
-                            <div className="text-xs text-muted">{getSku(item.product_id)}</div>
+                        <div key={itemIdx} className="bg-white border border-border rounded p-2 space-y-2">
+                          <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <div className="text-xs font-semibold text-navy">{getName(item.product_id)}</div>
+                              <div className="text-xs text-muted">{getSku(item.product_id)}</div>
+                            </div>
+                            <input type="number" min="1" value={item.qty_units} onChange={(e) => updatePalletItem(palletIdx, itemIdx, "qty_units", parseInt(e.target.value) || 1)} className="w-20 px-2 py-1 border border-border rounded text-sm focus:outline-none focus:border-accent-2" />
+                            <button onClick={() => removeItemFromPallet(palletIdx, itemIdx)} className="px-2 py-1 bg-red text-white rounded text-xs font-semibold hover:opacity-90">✕</button>
                           </div>
-                          <input type="number" min="1" value={item.qty_units} onChange={(e) => updatePalletItem(palletIdx, itemIdx, "qty_units", parseInt(e.target.value) || 1)} className="w-20 px-2 py-1 border border-border rounded text-sm focus:outline-none focus:border-accent-2" />
-                          <button onClick={() => removeItemFromPallet(palletIdx, itemIdx)} className="px-2 py-1 bg-red text-white rounded text-xs font-semibold hover:opacity-90">✕</button>
+                          <div>
+                            <label className="block text-xs font-semibold text-navy mb-1">Expiry Date</label>
+                            <input type="date" value={item.expiration_date_note || ""} onChange={(e) => updatePalletItem(palletIdx, itemIdx, "expiration_date_note", e.target.value)} className="w-full px-2 py-1 border border-border rounded text-sm focus:outline-none focus:border-accent-2" />
+                          </div>
                         </div>
                       );
                     })}
