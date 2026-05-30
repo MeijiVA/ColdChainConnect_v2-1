@@ -3,7 +3,9 @@ import { Card } from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, Plus } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RefreshCw, Plus, Calendar as CalendarIcon, X } from "lucide-react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Booking, Truck, Customer, Product } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
@@ -20,6 +22,8 @@ export function BookingSummary() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "prep" | "ready">("all");
   const [dateFilter, setDateFilter] = useState<"all" | "today" | "week" | "month">("all");
+  const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
+  const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
 
   // Assign truck modal
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -190,7 +194,20 @@ export function BookingSummary() {
       b.customer_id.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
-    if (dateFilter !== "all") {
+
+    // Check custom date range first
+    if (customStartDate || customEndDate) {
+      const bookingDate = new Date(b.created_at);
+      const bookingDateNorm = new Date(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate());
+      if (customStartDate) {
+        const startNorm = new Date(customStartDate.getFullYear(), customStartDate.getMonth(), customStartDate.getDate());
+        if (bookingDateNorm < startNorm) return false;
+      }
+      if (customEndDate) {
+        const endNorm = new Date(customEndDate.getFullYear(), customEndDate.getMonth(), customEndDate.getDate());
+        if (bookingDateNorm > endNorm) return false;
+      }
+    } else if (dateFilter !== "all") {
       const category = getDateCategory(b.created_at);
       if (dateFilter === "today" && category !== "today") return false;
       if (dateFilter === "week" && !["today", "yesterday", "week"].includes(category)) return false;
@@ -242,25 +259,86 @@ export function BookingSummary() {
       )}
 
       {/* Date Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {[
-          { value: "all" as const, label: "All Dates" },
-          { value: "today" as const, label: "Today" },
-          { value: "week" as const, label: "This Week" },
-          { value: "month" as const, label: "This Month" },
-        ].map((option) => (
-          <button
-            key={option.value}
-            onClick={() => setDateFilter(option.value)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-              dateFilter === option.value
-                ? "bg-accent-2 text-white"
-                : "bg-off-white text-navy hover:bg-white border border-border"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-3">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[
+            { value: "all" as const, label: "All Dates" },
+            { value: "today" as const, label: "Today" },
+            { value: "week" as const, label: "This Week" },
+            { value: "month" as const, label: "This Month" },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                setDateFilter(option.value);
+                if (option.value !== "all") {
+                  setCustomStartDate(undefined);
+                  setCustomEndDate(undefined);
+                }
+              }}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                dateFilter === option.value && !customStartDate && !customEndDate
+                  ? "bg-accent-2 text-white"
+                  : "bg-off-white text-navy hover:bg-white border border-border"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom Date Range Picker */}
+        <div className="flex gap-2 items-center">
+          <span className="text-xs font-semibold text-muted uppercase tracking-wider">Or select date range:</span>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="px-3 py-2 border border-border rounded-lg text-sm bg-white hover:bg-off-white flex items-center gap-2">
+                <CalendarIcon size={16} />
+                {customStartDate
+                  ? `${customStartDate.toLocaleDateString()} ${customEndDate ? `- ${customEndDate.toLocaleDateString()}` : ""}`
+                  : "Pick dates"}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <div className="p-4 space-y-4">
+                <div>
+                  <p className="text-xs font-semibold text-navy mb-2">Start Date</p>
+                  <Calendar
+                    mode="single"
+                    selected={customStartDate}
+                    onSelect={(date) => {
+                      setCustomStartDate(date);
+                      setDateFilter("all");
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-navy mb-2">End Date</p>
+                  <Calendar
+                    mode="single"
+                    selected={customEndDate}
+                    onSelect={(date) => {
+                      setCustomEndDate(date);
+                      setDateFilter("all");
+                    }}
+                  />
+                </div>
+                {(customStartDate || customEndDate) && (
+                  <button
+                    onClick={() => {
+                      setCustomStartDate(undefined);
+                      setCustomEndDate(undefined);
+                      setDateFilter("all");
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50 flex items-center justify-center gap-2"
+                  >
+                    <X size={14} /> Clear Dates
+                  </button>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
       <SearchFilterBar
