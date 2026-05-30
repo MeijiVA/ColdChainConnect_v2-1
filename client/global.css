@@ -1,0 +1,209 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Barlow:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=Barlow+Condensed:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * ACDP Cold Chain Connect - ERP System Design Tokens
+   * tailwind.config.ts expects HSL values
+  */
+  :root {
+    /* Navy/Primary Colors */
+    --navy: 230 79% 20%;
+    --navy-dark: 236 90% 15%;
+    --navy-mid: 235 85% 18%;
+    --navy-light: 233 73% 21%;
+    --navy-card: 0 0% 100%;
+    
+    /* Accent Colors */
+    --accent: 230 79% 20%;
+    --accent2: 240 87% 35%;
+    
+    /* Status/Utility Colors */
+    --gold: 37 92% 50%;
+    --green: 151 66% 40%;
+    --red: 4 74% 55%;
+    --yellow: 35 84% 63%;
+    
+    /* Neutral Colors */
+    --white: 0 0% 100%;
+    --off-white: 0 0% 96%;
+    --muted: 223 14% 50%;
+    --border: 220 13% 91%;
+    
+    /* Legacy - for compatibility */
+    --background: 0 0% 97%;
+    --foreground: 10 4% 11%;
+    
+    --primary: 230 79% 20%;
+    --primary-foreground: 0 0% 98%;
+    
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 230 79% 20%;
+    
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    
+    --input: 220 13% 91%;
+    --ring: 230 79% 20%;
+    
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --navy: 230 79% 20%;
+    --navy-dark: 236 90% 15%;
+    --navy-mid: 235 85% 18%;
+    --navy-light: 233 73% 21%;
+    --navy-card: 15 10% 10%;
+    
+    --accent: 230 79% 20%;
+    --accent2: 240 87% 35%;
+    
+    --gold: 37 92% 50%;
+    --green: 151 66% 40%;
+    --red: 4 74% 55%;
+    --yellow: 35 84% 63%;
+    
+    --white: 0 0% 100%;
+    --off-white: 230 50% 95%;
+    --muted: 223 14% 50%;
+    --border: 230 30% 25%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-size: 14px;
+  }
+
+  @media (max-width: 768px) {
+    html {
+      font-size: 13px;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      @apply text-sm sm:text-base md:text-lg lg:text-xl xl:text-2xl;
+    }
+
+    body {
+      @apply text-xs sm:text-sm;
+    }
+  }
+
+  body {
+    @apply bg-off-white text-foreground font-barlow;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-rajdhani;
+  }
+
+  :where(p, span, li, a, button, label, td, th) {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  pre,
+  code {
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--navy));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--off-white));
+    border-radius: 4px;
+  }
+}
+
+@layer utilities {
+  /* Visible scrollbars with custom styling */
+  .scrollbar-visible {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(209, 213, 219) rgb(249, 250, 251);
+  }
+
+  .scrollbar-visible::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+
+  .scrollbar-visible::-webkit-scrollbar-track {
+    background: rgb(249, 250, 251);
+  }
+
+  .scrollbar-visible::-webkit-scrollbar-thumb {
+    background: rgb(209, 213, 219);
+    border-radius: 3px;
+  }
+
+  .scrollbar-visible::-webkit-scrollbar-thumb:hover {
+    background: rgb(156, 163, 175);
+  }
+}
+
+@layer components {
+  /* Page transitions */
+  .page {
+    @apply hidden;
+  }
+
+  .page.active {
+    @apply block;
+  }
+
+  /* Common badge styles */
+  .badge {
+    @apply inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  .badge-green {
+    @apply bg-green/15 text-green border border-green/30;
+  }
+
+  .badge-red {
+    @apply bg-red/15 text-red border border-red/30;
+  }
+
+  .badge-gold {
+    @apply bg-gold/15 text-gold border border-gold/30;
+  }
+
+  .badge-blue {
+    @apply bg-accent-2/15 text-accent-2 border border-accent-2/30;
+  }
+
+  /* Stock value badges */
+  .stock-val {
+    @apply inline-block px-2.5 py-0.5 rounded font-bold text-sm font-rajdhani;
+  }
+
+  .stock-low {
+    @apply bg-red/20 text-red;
+  }
+
+  .stock-med {
+    @apply bg-gold/20 text-gold;
+  }
+
+  .stock-ok {
+    @apply bg-green/20 text-green;
+  }
+}
