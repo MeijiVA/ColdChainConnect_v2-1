@@ -226,7 +226,7 @@ function ViewProductModal({ product, onClose }: { product: Product; onClose: () 
           </div>
           <div>
             <label className="block text-xs font-semibold text-muted mb-1">Batch Tracking</label>
-            <div className="text-sm"><span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.batch_tracking_enabled ? "badge-green" : "badge-red"}`}>{product.batch_tracking_enabled ? "Enabled" : "Disabled"}</span></div>
+            <div className="text-sm"><span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.batch_tracking_enabled ? "badge-green" : "badge-red"}`}>{product.batch_tracking_enabled ? "Enabled" : "Discontinued"}</span></div>
           </div>
           {(product as any).manufacturer && (
             <div>
@@ -513,7 +513,7 @@ export function Pricing({ onBack }: PricingProps) {
                           className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.batch_tracking_enabled ? "badge-green" : "badge-gold"
                             }`}
                         >
-                          {product.batch_tracking_enabled ? "Tracked" : "Untracked"}
+                          {product.batch_tracking_enabled ? "Tracked" : "Discontinued"}
                         </span>
                         {(product as any).is_discontinued && (
                           <span className="inline-block px-2 py-0.5 rounded text-xs font-bold badge-red">
@@ -546,7 +546,7 @@ export function Pricing({ onBack }: PricingProps) {
                     <td className="px-3 py-3 hidden md:table-cell">
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${product.batch_tracking_enabled ? "badge-green" : "badge-red"
                         }`}>
-                        {product.batch_tracking_enabled ? "Yes" : "No"}
+                        {product.batch_tracking_enabled ? "Yes" : "Discontinued"}
                       </span>
                     </td>
                     <td style={{ width: '120px' }} className="sticky right-0 z-10 px-3 py-3 bg-white border-l border-border shadow-left">
