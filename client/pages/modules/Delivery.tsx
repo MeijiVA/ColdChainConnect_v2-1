@@ -213,10 +213,10 @@ export function DeliveryDispatch() {
           </span>
         </div>
 
-        {/* Agent */}
+        {/* Driver */}
         <div className="border-t border-border pt-3">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Agent</p>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Driver</p>
             {truckDeliveries.some((d) => d.status !== "completed") ? (
               <span className="text-xs font-semibold text-accent-2 bg-accent-2/10 px-2 py-1 rounded">Locked</span>
             ) : (
@@ -233,7 +233,7 @@ export function DeliveryDispatch() {
               )}
             </div>
           ) : (
-            <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">No agent assigned</div>
+            <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">No driver assigned</div>
           )}
         </div>
 
