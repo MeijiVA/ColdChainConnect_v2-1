@@ -680,21 +680,21 @@ function ChangeDriverModal({ truck, drivers, token, onClose, onSave }: {
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!selectedDriverId) { alert("Please select an agent"); return; }
+    if (!selectedDriverId) { alert("Please select a driver"); return; }
     setSaving(true);
     try { await onSave(selectedDriverId); }
     finally { setSaving(false); }
   };
 
   return (
-    <ModalShell title={`Change Agent — ${truck.name}`} onClose={onClose}>
+    <ModalShell title={`Change Driver — ${truck.name}`} onClose={onClose}>
       <div>
-        <label className="block text-xs font-semibold text-navy mb-2">Select Agent *</label>
+        <label className="block text-xs font-semibold text-navy mb-2">Select Driver *</label>
         <select value={selectedDriverId} onChange={(e) => setSelectedDriverId(e.target.value)}
           className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
-          <option value="">Choose an agent…</option>
+          <option value="">Choose a driver…</option>
           {drivers.filter((d) => d.is_active).map((d) => (
-            <option key={d.id} value={d.id}>{d.full_name || d.id.slice(0, 8)}{d.contact_info && ` — ${d.contact_info}`}</option>
+            <option key={d.id} value={d.id}>{d.full_name}{d.contact_info && ` — ${d.contact_info}`}</option>
           ))}
         </select>
       </div>
@@ -702,7 +702,7 @@ function ChangeDriverModal({ truck, drivers, token, onClose, onSave }: {
         <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">Cancel</button>
         <button onClick={handleSave} disabled={!selectedDriverId || saving}
           className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-          {saving ? "Updating…" : "Change Agent"}
+          {saving ? "Updating…" : "Change Driver"}
         </button>
       </div>
     </ModalShell>
