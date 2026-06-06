@@ -1,0 +1,1188 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../../hooks/useAuth";
+import { RefreshCw, ChevronLeft, Truck as TruckIcon, ChevronDown, ChevronUp } from "lucide-react";
+import { Delivery, DeliveryItem, Truck, Invoice, Customer, Driver, Agent } from "@shared/api";
+
+// ─── Extended types ────────────────────────────────────────────────────────────
+
+interface DeliveryItemExt extends DeliveryItem {
+  completed_at?: string;
+  receipt_number?: string;
+  invoice?: Invoice;
+  customer?: Customer;
+}
+
+interface DeliveryExt extends Delivery {
+  delivery_items: DeliveryItemExt[];
+  truck?: Truck;
+  driver?: Driver | null;
+  agent?: Agent | null;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function authHeaders(token: string) {
+  return { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+}
+
+function statusBadgeClass(status: string) {
+  return (
+    status === "completed"  ? "badge-green" :
+    status === "in_transit" ? "badge-gold"  :
+    "badge-blue"
+  );
+}
+
+function statusLabel(status: string) {
+  return status === "in_transit" ? "In Transit" :
+         status === "completed"  ? "Completed"  : "Pending";
+}
+
+function truckStatusLabel(status: string) {
+  return status === "in_transit" ? "In Transit" :
+         status === "maintenance" ? "Maintenance" : "Available";
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
+export function DeliveryDispatch() {
+  const { token, user } = useAuth();
+
+  const [trucks,      setTrucks]      = useState<Truck[]>([]);
+  const [drivers,     setDrivers]     = useState<Driver[]>([]);
+  const [agents,      setAgents]      = useState<Agent[]>([]);
+  const [deliveries,  setDeliveries]  = useState<DeliveryExt[]>([]);
+  const [invoices,    setInvoices]    = useState<Invoice[]>([]);
+  const [customers,   setCustomers]   = useState<Customer[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [selectedTruck,        setSelectedTruck]        = useState<Truck | null>(null);
+  const [selectedDelivery,     setSelectedDelivery]     = useState<DeliveryExt | null>(null);
+  const [showAddTruckModal,    setShowAddTruckModal]    = useState(false);
+  const [showAddDeliveryModal, setShowAddDeliveryModal] = useState(false);
+  const [showChangeDriverModal,setShowChangeDriverModal]= useState(false);
+  const [showChangeTruckDriverModal, setShowChangeTruckDriverModal] = useState(false);
+  const [showPaymentModal,     setShowPaymentModal]     = useState(false);
+  const [paymentItem,          setPaymentItem]          = useState<{ delivery: DeliveryExt; item: DeliveryItemExt } | null>(null);
+  const [confirmingItem,       setConfirmingItem]       = useState<string | null>(null);
+
+  // Mobile: track which "panel" is visible — "trucks" | "detail"
+  const [mobileView, setMobileView] = useState<"trucks" | "detail">("trucks");
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [truckRes, driverRes, agentRes, deliveryRes, invoiceRes, customerRes] = await Promise.all([
+        fetch("/api/trucks",     { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/drivers",    { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/agents",     { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/deliveries", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/invoices",   { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/customers",  { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      const [trucksData, driversData, agentsData, deliveriesData, invoicesData, customersData] = await Promise.all([
+        truckRes.ok    ? truckRes.json()    : [],
+        driverRes.ok   ? driverRes.json()   : [],
+        agentRes.ok    ? agentRes.json()    : [],
+        deliveryRes.ok ? deliveryRes.json() : [],
+        invoiceRes.ok  ? invoiceRes.json()  : [],
+        customerRes.ok ? customerRes.json() : [],
+      ]);
+
+      setTrucks(trucksData);
+      setDrivers(driversData);
+      setAgents(agentsData);
+      setInvoices(invoicesData);
+      setCustomers(customersData);
+
+      const joined: DeliveryExt[] = (deliveriesData as DeliveryExt[]).map((d) => ({
+        ...d,
+        truck: (trucksData as Truck[]).find((t) => t.id === d.truck_id),
+        delivery_items: (d.delivery_items ?? []).map((item) => ({
+          ...item,
+          invoice:  (invoicesData  as Invoice[]).find((inv) => inv.id === item.invoice_id),
+          customer: (customersData as Customer[]).find((c)   => c.id   === item.destination_customer_id),
+        })),
+      }));
+      setDeliveries(joined);
+
+      if (selectedTruck) {
+        const refreshed = (trucksData as Truck[]).find((t) => t.id === selectedTruck.id);
+        setSelectedTruck(refreshed ?? null);
+      }
+      if (selectedDelivery) {
+        const refreshed = joined.find((d) => d.id === selectedDelivery.id);
+        setSelectedDelivery(refreshed ?? null);
+      }
+      setError(null);
+    } catch {
+      setError("Failed to load data. Check your connection.");
+    } finally {
+      setLoading(false);
+    }
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAll();
+    setIsRefreshing(false);
+  };
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const truckDeliveries = selectedTruck
+    ? deliveries.filter((d) => d.truck_id === selectedTruck.id)
+    : [];
+
+  const handleConfirm = (delivery: DeliveryExt, item: DeliveryItemExt) => {
+    setPaymentItem({ delivery, item });
+    setShowPaymentModal(true);
+  };
+
+  const handleConfirmWithPayment = async (isPaid: boolean, paymentMethod?: string, paymentReference?: string) => {
+    if (!token || !paymentItem) return;
+    const { delivery, item } = paymentItem;
+    setConfirmingItem(item.id);
+    try {
+      const res = await fetch(
+        `/api/deliveries/${delivery.id}/items/${item.id}/confirm`,
+        {
+          method: "POST",
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            is_paid: isPaid,
+            payment_method: paymentMethod,
+            payment_reference: paymentReference,
+          })
+        }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+      setShowPaymentModal(false);
+      setPaymentItem(null);
+    } catch (err) {
+      alert("Failed to confirm: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setConfirmingItem(null);
+    }
+  };
+
+  const handleCreateDelivery = async (
+    destinations: { invoice_id: string; destination_customer_id: string }[],
+  ) => {
+    if (!token || !selectedTruck) return;
+    try {
+      const res = await fetch("/api/deliveries", {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          truck_id: selectedTruck.id,
+          destinations,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+      setShowAddDeliveryModal(false);
+    } catch (err) {
+      alert("Failed to create delivery: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const assignedInvoiceIds = new Set(
+    deliveries
+      .filter((d) => d.status !== "completed")
+      .flatMap((d) => d.delivery_items.map((i) => i.invoice_id))
+  );
+  // Also exclude invoices assigned to completed deliveries
+  const completedInvoiceIds = new Set(
+    deliveries
+      .filter((d) => d.status === "completed")
+      .flatMap((d) => d.delivery_items.map((i) => i.invoice_id))
+  );
+  const eligibleInvoices = invoices.filter(
+    (inv) => (inv.status === "issued" || inv.status === "draft") &&
+             inv.payment_status === "unpaid" &&
+             !assignedInvoiceIds.has(inv.id) &&
+             !completedInvoiceIds.has(inv.id)
+  );
+
+  const handleReleaseDelivery = async (deliveryId: string) => {
+    if (!token) return;
+    if (!confirm("Release this completed delivery? It will be removed from the list.")) return;
+    try {
+      const res = await fetch(`/api/deliveries/${deliveryId}`, {
+        method: "DELETE",
+        headers: authHeaders(token),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+    } catch (err) {
+      alert("Failed to release: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const selectTruck = (truck: Truck) => {
+    setSelectedTruck(truck);
+    setSelectedDelivery(null);
+    setShowChangeTruckDriverModal(false);
+    setMobileView("detail");
+  };
+
+  if (loading) return <div className="flex-1 px-6 py-8 text-sm text-muted">Loading deliveries…</div>;
+
+  // ── Truck detail panel (shared between mobile and desktop) ─────────────────
+  const DetailPanel = () => (
+    <div className="space-y-4">
+      {/* Mobile back button */}
+      <button
+        onClick={() => setMobileView("trucks")}
+        className="md:hidden flex items-center gap-1 text-sm font-semibold text-accent-2 mb-1"
+      >
+        <ChevronLeft size={16} /> All Trucks
+      </button>
+
+      {/* Truck card */}
+      <div className="bg-white rounded-xl border border-border p-4 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Truck</p>
+            <p className="font-rajdhani font-bold text-navy text-lg mt-0.5">{selectedTruck!.name}</p>
+            <p className="text-xs text-muted">{selectedTruck!.district}</p>
+          </div>
+          <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadgeClass(selectedTruck!.status)}`}>
+            {truckStatusLabel(selectedTruck!.status)}
+          </span>
+        </div>
+
+        {/* Agent */}
+        <div className="border-t border-border pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Agent</p>
+            {truckDeliveries.some((d) => d.status !== "completed") ? (
+              <span className="text-xs font-semibold text-accent-2 bg-accent-2/10 px-2 py-1 rounded">Locked</span>
+            ) : (
+              <button onClick={() => setShowChangeDriverModal(true)} className="text-xs font-semibold text-accent-2 hover:opacity-70">
+                Change
+              </button>
+            )}
+          </div>
+          {selectedTruck!.driver_id ? (
+            <div className="bg-off-white rounded-lg p-3">
+              <p className="font-semibold text-navy text-sm">{drivers.find((d) => d.id === selectedTruck!.driver_id)?.full_name || selectedTruck!.driver_id.slice(0, 8)}</p>
+              {drivers.find((d) => d.id === selectedTruck!.driver_id)?.contact_info && (
+                <p className="text-xs text-muted mt-0.5">{drivers.find((d) => d.id === selectedTruck!.driver_id)?.contact_info}</p>
+              )}
+            </div>
+          ) : (
+            <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">No agent assigned</div>
+          )}
+        </div>
+
+        {/* Driver — assigned to the truck for this run */}
+        <div className="border-t border-border pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Driver</p>
+            <button
+              onClick={() => setShowChangeTruckDriverModal(true)}
+              className="text-xs font-semibold text-accent-2 hover:opacity-70"
+            >
+              {selectedTruck!.driver_id ? "Change" : "Assign"}
+            </button>
+          </div>
+          {selectedTruck!.driver_id ? (() => {
+            const d = drivers.find((dr) => dr.id === selectedTruck!.driver_id);
+            return (
+              <div className="bg-off-white rounded-lg p-3">
+                <p className="font-semibold text-navy text-sm">{d?.full_name || selectedTruck!.driver_id.slice(0, 8)}</p>
+                {d?.contact_info && <p className="text-xs text-muted mt-0.5">{d.contact_info}</p>}
+                {d?.license      && <p className="text-xs text-muted mt-0.5">License: {d.license}</p>}
+              </div>
+            );
+          })() : (
+            <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">No driver assigned</div>
+          )}
+        </div>
+
+        <button
+          onClick={() => setShowAddDeliveryModal(true)}
+          className="w-full px-3 py-2.5 bg-navy text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          + Add Delivery
+        </button>
+      </div>
+
+      {/* Deliveries */}
+      <p className="text-xs font-semibold text-muted uppercase tracking-wider">
+        Deliveries ({truckDeliveries.length})
+      </p>
+
+      {truckDeliveries.length === 0 ? (
+        <div className="bg-white rounded-xl border border-border p-6 text-center text-sm text-muted">
+          No deliveries for this truck yet.
+        </div>
+      ) : (
+        truckDeliveries.map((delivery) => (
+          <div
+            key={delivery.id}
+            className={`bg-white rounded-xl border-2 overflow-hidden transition-all ${
+              selectedDelivery?.id === delivery.id ? "border-accent-2" : "border-border"
+            }`}
+          >
+            {/* Delivery header */}
+            <div
+              className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-off-white/50 transition-colors"
+              onClick={() => setSelectedDelivery(selectedDelivery?.id === delivery.id ? null : delivery)}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${statusBadgeClass(delivery.status)}`}>
+                  {statusLabel(delivery.status)}
+                </span>
+                <span className="font-mono text-xs text-muted truncate">{delivery.id.slice(0, 8)}…</span>
+                <span className="text-xs text-muted flex-shrink-0">{delivery.delivery_items.length} stop{delivery.delivery_items.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                {delivery.status === "completed" && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleReleaseDelivery(delivery.id); }}
+                    className="px-2 py-1 text-xs font-semibold text-red border border-red/30 rounded hover:bg-red/10 transition-colors"
+                  >
+                    Release
+                  </button>
+                )}
+                <span className="text-xs text-muted hidden sm:block">
+                  {new Date(delivery.created_at).toLocaleDateString("en-PH")}
+                </span>
+                {selectedDelivery?.id === delivery.id
+                  ? <ChevronUp size={14} className="text-muted" />
+                  : <ChevronDown size={14} className="text-muted" />
+                }
+              </div>
+            </div>
+
+            {/* Driver / Agent badges */}
+            {(delivery.driver || delivery.agent) && (
+              <div className="flex items-center gap-3 px-4 pb-2 flex-wrap">
+                {delivery.driver && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5">
+                    🚗 {delivery.driver.full_name || delivery.driver_id?.slice(0, 8)}
+                  </span>
+                )}
+                {delivery.agent && (
+                  <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5">
+                    👤 {delivery.agent.full_name || delivery.agent_id?.slice(0, 8)}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Delivery stops — card layout on mobile, table on md+ */}
+            {selectedDelivery?.id === delivery.id && (
+              <div className="border-t border-border">
+                {delivery.delivery_items.length === 0 ? (
+                  <p className="px-4 py-4 text-xs text-muted">No stops assigned yet.</p>
+                ) : (
+                  <>
+                    {/* Mobile: card per stop */}
+                    <div className="md:hidden divide-y divide-border">
+                      {delivery.delivery_items.map((item) => (
+                        <div key={item.id} className="p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-navy text-sm">
+                              {item.customer?.store_name ?? item.destination_customer_id.slice(0, 8)}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadgeClass(item.status)}`}>
+                              {statusLabel(item.status)}
+                            </span>
+                          </div>
+                          {item.customer?.location && (
+                            <p className="text-xs text-muted">{item.customer.location}</p>
+                          )}
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-muted">
+                            <span className="font-mono">Invoice: {item.invoice_id.slice(0, 8)}…</span>
+                            {item.invoice && (
+                              <span className={`px-1.5 py-0.5 rounded font-semibold ${
+                                item.invoice.status === "paid" ? "badge-green" : "badge-gold"
+                              }`}>
+                                {item.invoice.status}
+                              </span>
+                            )}
+                          </div>
+                          {item.receipt_number && (
+                            <p className="text-xs text-muted">Receipt: {item.receipt_number}</p>
+                          )}
+                          {item.completed_at && (
+                            <p className="text-xs text-muted">
+                              Confirmed: {new Date(item.completed_at).toLocaleString("en-PH")}
+                            </p>
+                          )}
+                          {item.status === "completed" ? (
+                            <span className="text-xs text-green font-semibold">✅ Done</span>
+                          ) : (
+                            <button
+                              disabled={confirmingItem === item.id}
+                              onClick={() => handleConfirm(delivery, item)}
+                              className="w-full mt-1 px-3 py-2 bg-green text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            >
+                              {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop: table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr>
+                            {["Invoice", "Customer", "Status", "Receipt #", "Confirmed At", "Action"].map((h) => (
+                              <th key={h} className="bg-navy-mid text-muted font-semibold text-xs uppercase tracking-wider px-3 py-2.5 text-left border-b border-border whitespace-nowrap">
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {delivery.delivery_items.map((item) => (
+                            <tr key={item.id} className="border-b border-border hover:bg-off-white/40 transition-colors">
+                              <td className="px-3 py-3 font-mono text-navy">
+                                {item.invoice_id.slice(0, 8)}…
+                                {item.invoice && (
+                                  <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                    item.invoice.status === "paid" ? "badge-green" : "badge-gold"
+                                  }`}>
+                                    {item.invoice.status}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 text-navy font-semibold">
+                                {item.customer?.store_name ?? item.destination_customer_id.slice(0, 8)}
+                                {item.customer?.location && (
+                                  <p className="text-muted font-normal">{item.customer.location}</p>
+                                )}
+                              </td>
+                              <td className="px-3 py-3 whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadgeClass(item.status)}`}>
+                                  {statusLabel(item.status)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 font-mono text-navy">
+                                {item.receipt_number ?? <span className="text-muted">—</span>}
+                              </td>
+                              <td className="px-3 py-3 text-muted">
+                                {item.completed_at
+                                  ? new Date(item.completed_at).toLocaleString("en-PH")
+                                  : <span className="text-muted">—</span>
+                                }
+                              </td>
+                              <td className="px-3 py-3">
+                                {item.status === "completed" ? (
+                                  <span className="text-xs text-green font-semibold">✅ Done</span>
+                                ) : (
+                                  <button
+                                    disabled={confirmingItem === item.id}
+                                    onClick={() => handleConfirm(delivery, item)}
+                                    className="px-3 py-1 bg-green text-white rounded text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                                  >
+                                    {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col px-4 md:px-6 py-4 md:py-6 gap-4 min-h-0">
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 flex-shrink-0">
+        <div>
+          <h1 className="font-rajdhani text-2xl md:text-3xl font-bold text-navy">Delivery & Dispatch</h1>
+          <p className="text-xs text-muted mt-0.5">Assign invoices to trucks and track deliveries</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-semibold text-navy hover:bg-off-white disabled:opacity-50 flex items-center gap-2"
+          >
+            <RefreshCw size={15} className={isRefreshing ? "animate-spin" : ""} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowAddTruckModal(true)}
+            className="px-3 py-2 bg-accent-2 text-white rounded-lg font-semibold text-sm hover:opacity-90"
+          >
+            + Add Truck
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-red/30 bg-red/10 px-4 py-2 text-xs text-red flex-shrink-0">
+          ⚠️ {error}
+        </div>
+      )}
+
+      {/* ── Mobile: stacked (trucks list OR detail) ── */}
+      <div className="md:hidden flex-1 overflow-y-auto">
+        {mobileView === "trucks" ? (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Trucks</p>
+            {trucks.length === 0 ? (
+              <p className="text-sm text-muted">No trucks registered yet.</p>
+            ) : (
+              trucks.map((truck) => {
+                const td = deliveries.filter((d) => d.truck_id === truck.id);
+                const active = td.filter((d) => d.status !== "completed").length;
+                return (
+                  <div
+                    key={truck.id}
+                    onClick={() => selectTruck(truck)}
+                    className="bg-white rounded-xl border-2 border-border p-4 cursor-pointer active:bg-off-white transition-colors flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-navy/10 flex items-center justify-center flex-shrink-0">
+                        <TruckIcon size={18} className="text-navy" />
+                      </div>
+                      <div>
+                        <p className="font-rajdhani font-bold text-navy">{truck.name}</p>
+                        <p className="text-xs text-muted">{truck.district}</p>
+                        <p className="text-xs text-muted mt-0.5">{active} active · {td.length} total</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadgeClass(truck.status)}`}>
+                        {truckStatusLabel(truck.status)}
+                      </span>
+                      <ChevronLeft size={14} className="text-muted rotate-180" />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : (
+          selectedTruck && <DetailPanel />
+        )}
+      </div>
+
+      {/* ── Desktop: side-by-side ── */}
+      <div className="hidden md:flex gap-5 flex-1 min-h-0 overflow-hidden">
+        {/* Truck list */}
+        <div className="w-64 lg:w-72 flex-shrink-0 overflow-y-auto space-y-3 pr-1">
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Trucks</p>
+          {trucks.length === 0 ? (
+            <p className="text-xs text-muted">No trucks registered yet.</p>
+          ) : (
+            trucks.map((truck) => {
+              const td = deliveries.filter((d) => d.truck_id === truck.id);
+              const active = td.filter((d) => d.status !== "completed").length;
+              const isSelected = selectedTruck?.id === truck.id;
+              return (
+                <div
+                  key={truck.id}
+                  onClick={() => selectTruck(truck)}
+                  className={`bg-white rounded-xl border-2 p-4 cursor-pointer transition-all hover:shadow-md ${
+                    isSelected ? "border-accent-2 shadow-md" : "border-border"
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-rajdhani font-bold text-navy leading-tight truncate">{truck.name}</p>
+                      <p className="text-xs text-muted mt-0.5">{truck.district}</p>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold flex-shrink-0 ${statusBadgeClass(truck.status)}`}>
+                      {truckStatusLabel(truck.status)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted mt-2">
+                    {active} active · {td.length} total
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Detail panel */}
+        <div className="flex-1 overflow-y-auto">
+          {!selectedTruck ? (
+            <div className="flex items-center justify-center h-full text-sm text-muted gap-2">
+              <TruckIcon size={18} className="opacity-40" />
+              Select a truck to view its deliveries
+            </div>
+          ) : (
+            <DetailPanel />
+          )}
+        </div>
+      </div>
+
+      {/* Modals */}
+      {showAddTruckModal && (
+        <AddTruckModal
+          drivers={drivers}
+          token={token!}
+          onClose={() => setShowAddTruckModal(false)}
+          onCreated={async () => { await fetchAll(); setShowAddTruckModal(false); }}
+        />
+      )}
+
+      {showChangeDriverModal && selectedTruck && (
+        <ChangeDriverModal
+          truck={selectedTruck}
+          drivers={drivers}
+          token={token!}
+          onClose={() => setShowChangeDriverModal(false)}
+          onSave={async (driverId) => {
+            try {
+              const res = await fetch(`/api/trucks/${selectedTruck.id}`, {
+                method: "PATCH",
+                headers: authHeaders(token!),
+                body: JSON.stringify({ driver_id: driverId }),
+              });
+              if (!res.ok) throw new Error(await res.text());
+              await fetchAll();
+              setShowChangeDriverModal(false);
+            } catch (err) {
+              alert("Failed to update agent: " + (err instanceof Error ? err.message : String(err)));
+            }
+          }}
+        />
+      )}
+
+      {showChangeTruckDriverModal && selectedTruck && (
+        <ChangeTruckDriverModal
+          truck={selectedTruck}
+          drivers={drivers}
+          token={token!}
+          onClose={() => setShowChangeTruckDriverModal(false)}
+          onSave={async (driverId) => {
+            try {
+              const res = await fetch(`/api/trucks/${selectedTruck.id}`, {
+                method: "PATCH",
+                headers: authHeaders(token!),
+                body: JSON.stringify({ driver_id: driverId || null }),
+              });
+              if (!res.ok) throw new Error(await res.text());
+              await fetchAll();
+              setShowChangeTruckDriverModal(false);
+            } catch (err) {
+              alert("Failed to update driver: " + (err instanceof Error ? err.message : String(err)));
+            }
+          }}
+        />
+      )}
+
+      {showAddDeliveryModal && selectedTruck && (
+        <AddDeliveryModal
+          truck={selectedTruck}
+          eligibleInvoices={eligibleInvoices}
+          customers={customers}
+          onClose={() => setShowAddDeliveryModal(false)}
+          onSave={handleCreateDelivery}
+        />
+      )}
+
+      {showPaymentModal && paymentItem && (
+        <PaymentConfirmationModal
+          item={paymentItem.item}
+          customer={paymentItem.item.customer}
+          invoice={paymentItem.item.invoice}
+          onClose={() => { setShowPaymentModal(false); setPaymentItem(null); }}
+          onConfirm={handleConfirmWithPayment}
+          isConfirming={confirmingItem === paymentItem.item.id}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Change Truck Driver Modal ────────────────────────────────────────────────
+// Mirrors the existing ChangeDriverModal (for agents) but targets the Driver
+// field on the truck — populated from the drivers table in the DB.
+
+function ChangeTruckDriverModal({ truck, drivers, token, onClose, onSave }: {
+  truck: Truck; drivers: Driver[]; token: string; onClose: () => void; onSave: (id: string) => Promise<void>;
+}) {
+  const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try { await onSave(selectedDriverId); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <ModalShell title={`Assign Driver — ${truck.name}`} onClose={onClose}>
+      <div>
+        <label className="block text-xs font-semibold text-navy mb-2">Select Driver</label>
+        <select
+          value={selectedDriverId}
+          onChange={(e) => setSelectedDriverId(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+        >
+          <option value="">No driver assigned</option>
+          {drivers.filter((d) => d.is_active).map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.full_name || d.id.slice(0, 8)}
+              {d.license      ? ` · ${d.license}`      : ""}
+              {d.contact_info ? ` — ${d.contact_info}` : ""}
+            </option>
+          ))}
+        </select>
+
+        {/* Preview card for the selected driver */}
+        {selectedDriverId && (() => {
+          const d = drivers.find((dr) => dr.id === selectedDriverId);
+          return d ? (
+            <div className="mt-3 bg-off-white rounded-lg p-3 text-xs space-y-0.5">
+              <p className="font-semibold text-navy text-sm">{d.full_name || "—"}</p>
+              {d.contact_info && <p className="text-muted">📞 {d.contact_info}</p>}
+              {d.license      && <p className="text-muted">🪪 {d.license}</p>}
+              {d.employment_type && (
+                <p className="text-muted capitalize">{d.employment_type.replace("_", " ")}</p>
+              )}
+            </div>
+          ) : null;
+        })()}
+      </div>
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save Driver"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Add New Truck Modal ──────────────────────────────────────────────────────
+
+function AddTruckModal({ drivers, token, onClose, onCreated }: {
+  drivers: Driver[]; token: string; onClose: () => void; onCreated: () => Promise<void>;
+}) {
+  const [truckName, setTruckName]           = useState("");
+  const [truckDistrict, setTruckDistrict]   = useState("");
+  const [selectedDriverId, setSelectedDriverId] = useState("");
+  const [truckStatus, setTruckStatus]       = useState<"available" | "in_transit" | "maintenance">("available");
+  const [saving, setSaving]                 = useState(false);
+
+  const handleSave = async () => {
+    if (!truckName || !truckDistrict) { alert("Fill in truck name and district."); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/trucks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: truckName, district: truckDistrict, driver_id: selectedDriverId || undefined, status: truckStatus }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await onCreated();
+    } catch (err) {
+      alert("Failed to add truck: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Add New Truck" onClose={onClose}>
+      <div className="space-y-4">
+        {[
+          { label: "Truck Name *", value: truckName, onChange: setTruckName, placeholder: "e.g., Truck A" },
+          { label: "District *",   value: truckDistrict, onChange: setTruckDistrict, placeholder: "e.g., Metro Manila" },
+        ].map(({ label, value, onChange, placeholder }) => (
+          <div key={label}>
+            <label className="block text-xs font-semibold text-navy mb-1">{label}</label>
+            <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2" />
+          </div>
+        ))}
+        <div>
+          <label className="block text-xs font-semibold text-navy mb-1">Status</label>
+          <select value={truckStatus} onChange={(e) => setTruckStatus(e.target.value as any)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
+            <option value="available">Available</option>
+            <option value="in_transit">In Transit</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-navy mb-1">Assign Agent (Optional)</label>
+          <select value={selectedDriverId} onChange={(e) => setSelectedDriverId(e.target.value)}
+            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
+            <option value="">No agent assigned</option>
+            {drivers.filter((d) => d.is_active).map((d) => (
+              <option key={d.id} value={d.id}>{d.full_name || d.id.slice(0, 8)}{d.contact_info && ` — ${d.contact_info}`}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">Cancel</button>
+        <button onClick={handleSave} disabled={!truckName || !truckDistrict || saving}
+          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+          {saving ? "Adding…" : "Add Truck"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Change Driver Modal ──────────────────────────────────────────────────────
+
+function ChangeDriverModal({ truck, drivers, token, onClose, onSave }: {
+  truck: Truck; drivers: Driver[]; token: string; onClose: () => void; onSave: (id: string) => Promise<void>;
+}) {
+  const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!selectedDriverId) { alert("Please select an agent"); return; }
+    setSaving(true);
+    try { await onSave(selectedDriverId); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <ModalShell title={`Change Agent — ${truck.name}`} onClose={onClose}>
+      <div>
+        <label className="block text-xs font-semibold text-navy mb-2">Select Agent *</label>
+        <select value={selectedDriverId} onChange={(e) => setSelectedDriverId(e.target.value)}
+          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
+          <option value="">Choose an agent…</option>
+          {drivers.filter((d) => d.is_active).map((d) => (
+            <option key={d.id} value={d.id}>{d.full_name || d.id.slice(0, 8)}{d.contact_info && ` — ${d.contact_info}`}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">Cancel</button>
+        <button onClick={handleSave} disabled={!selectedDriverId || saving}
+          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+          {saving ? "Updating…" : "Change Agent"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Add Delivery Modal ────────────────────────────────────────────────────────
+
+function AddDeliveryModal({ truck, eligibleInvoices, customers, onClose, onSave }: {
+  truck: Truck;
+  eligibleInvoices: Invoice[];
+  customers: Customer[];
+  onClose: () => void;
+  onSave: (d: { invoice_id: string; destination_customer_id: string }[]) => Promise<void>;
+}) {
+  const [stops, setStops] = useState([{ invoice_id: "" }]);
+  const [saving, setSaving] = useState(false);
+
+  // Build a label for each eligible invoice: "Store Name — Contact Person"
+  function orderLabel(inv: Invoice): string {
+    // Prefer snapshot customer_name; fall back to looking up from customers list
+    const customer = customers.find((c) => {
+      // match via booking's destination_customer or via customer_name snapshot
+      return c.store_name === inv.customer_name;
+    });
+    const storeName    = inv.customer_name    || customer?.store_name    || inv.id.slice(0, 8).toUpperCase();
+    const contactPerson = customer?.contact_person || "";
+    return contactPerson ? `${storeName} — ${contactPerson}` : storeName;
+  }
+
+  // Given an invoice, resolve the destination_customer_id
+  function resolveCustomerId(inv: Invoice): string {
+    const matched = customers.find((c) => c.store_name === inv.customer_name);
+    return matched?.id ?? "";
+  }
+
+  const addStop    = () => setStops((s) => [...s, { invoice_id: "" }]);
+  const removeStop = (i: number) => setStops((s) => s.filter((_, idx) => idx !== i));
+  const updateStop = (i: number, invoice_id: string) =>
+    setStops((s) => s.map((stop, idx) => idx === i ? { invoice_id } : stop));
+
+  // Build the final payload: resolve customer from the selected invoice
+  const buildPayload = () =>
+    stops.map((s) => {
+      const inv = eligibleInvoices.find((i) => i.id === s.invoice_id);
+      return {
+        invoice_id: s.invoice_id,
+        destination_customer_id: inv ? resolveCustomerId(inv) : "",
+      };
+    });
+
+  const valid = stops.every((s) => {
+    if (!s.invoice_id) return false;
+    const inv = eligibleInvoices.find((i) => i.id === s.invoice_id);
+    if (!inv) return false;
+    return !!resolveCustomerId(inv);
+  });
+
+  // Already-picked invoice ids (to prevent duplicates within modal)
+  const pickedIds = new Set(stops.map((s) => s.invoice_id).filter(Boolean));
+
+  const handleSave = async () => {
+    if (!valid) { alert("All stops need a valid order with a matched customer."); return; }
+    setSaving(true);
+    try { await onSave(buildPayload()); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <ModalShell title={`Add Delivery — ${truck.name}`} onClose={onClose}>
+      <div className="space-y-3">
+
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-navy">Delivery Stops *</label>
+          <button onClick={addStop} className="text-xs text-accent-2 font-semibold hover:opacity-80">+ Add Stop</button>
+        </div>
+        {stops.map((stop, i) => {
+          const selectedInv = eligibleInvoices.find((inv) => inv.id === stop.invoice_id);
+          const resolvedCustomer = selectedInv ? customers.find((c) => c.store_name === selectedInv.customer_name) : null;
+          return (
+            <div key={i} className="bg-off-white rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-navy">Stop {i + 1}</p>
+                {stops.length > 1 && (
+                  <button onClick={() => removeStop(i)} className="text-xs text-red hover:opacity-70">✕ Remove</button>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted mb-1">Order (Customer — Contact)</label>
+                <select
+                  value={stop.invoice_id}
+                  onChange={(e) => updateStop(i, e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:border-accent-2 bg-white"
+                >
+                  <option value="">Select order…</option>
+                  {eligibleInvoices.map((inv) => {
+                    const disabled = pickedIds.has(inv.id) && inv.id !== stop.invoice_id;
+                    return (
+                      <option key={inv.id} value={inv.id} disabled={disabled}>
+                        {orderLabel(inv)}
+                        {" "}· {inv.receipt_number || inv.id.slice(0, 8).toUpperCase()}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Preview card once an order is selected */}
+              {selectedInv && (
+                <div className="text-xs text-muted bg-white rounded-md px-3 py-2 border border-border space-y-0.5">
+                  <p className="font-semibold text-navy">
+                    {resolvedCustomer?.store_name || selectedInv.customer_name || "—"}
+                  </p>
+                  {resolvedCustomer?.contact_person && (
+                    <p>Contact: {resolvedCustomer.contact_person}</p>
+                  )}
+                  {(resolvedCustomer?.location || selectedInv.customer_address) && (
+                    <p>{resolvedCustomer?.location || selectedInv.customer_address}</p>
+                  )}
+                  <p className="font-mono pt-0.5">
+                    Receipt: {selectedInv.receipt_number || selectedInv.id.slice(0, 8).toUpperCase()}
+                  </p>
+                  {!resolvedCustomer && (
+                    <p className="text-red font-semibold">⚠ Customer record not found — cannot add stop</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">Cancel</button>
+        <button onClick={handleSave} disabled={!valid || saving}
+          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50">
+          {saving ? "Saving…" : "Add Delivery"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Modal Shell ──────────────────────────────────────────────────────────────
+
+function ModalShell({ title, onClose, children }: {
+  title: string; onClose: () => void; children: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl border border-border w-full sm:max-w-lg max-h-[90vh] flex flex-col">
+        <div className="bg-navy-mid px-5 py-4 flex items-center justify-between border-b border-border rounded-t-2xl flex-shrink-0">
+          <h2 className="font-rajdhani text-base font-bold text-white">{title}</h2>
+          <button onClick={onClose} className="text-white hover:opacity-70 text-2xl leading-none">×</button>
+        </div>
+        <div className="p-5 overflow-y-auto space-y-4 flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Payment Confirmation Modal ────────────────────────────────────────────────
+
+function PaymentConfirmationModal({
+  item,
+  customer,
+  invoice,
+  onClose,
+  onConfirm,
+  isConfirming
+}: {
+  item: DeliveryItemExt;
+  customer?: any;
+  invoice?: any;
+  onClose: () => void;
+  onConfirm: (isPaid: boolean, paymentMethod?: string, paymentReference?: string) => Promise<void>;
+  isConfirming: boolean;
+}) {
+  const [isPaid, setIsPaid] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentReference, setPaymentReference] = useState("");
+
+  const PAYMENT_METHODS = [
+    { value: "cash", label: "💵 Cash" },
+    { value: "check", label: "✓ Check" },
+    { value: "bank_transfer", label: "🏦 Bank Transfer" },
+    { value: "online", label: "💳 Online Payment" },
+  ];
+
+  const handleConfirm = async () => {
+    await onConfirm(isPaid, isPaid ? paymentMethod : undefined, isPaid ? paymentReference : undefined);
+  };
+
+  return (
+    <ModalShell
+      title="Complete Delivery"
+      onClose={onClose}
+    >
+      <div className="space-y-5">
+        {/* Delivery Summary */}
+        <div className="bg-off-white rounded-lg p-4 space-y-2">
+          <p className="text-xs font-semibold text-muted uppercase tracking-wider">Delivery Details</p>
+          <p className="font-semibold text-navy">{customer?.store_name || "Customer"}</p>
+          <p className="text-xs text-muted">{customer?.location || "—"}</p>
+          {invoice && (
+            <p className="text-xs text-muted">Invoice: {invoice.id.slice(0, 8)}…</p>
+          )}
+        </div>
+
+        {/* Payment Status Question */}
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-navy">Was payment received at delivery?</p>
+
+          <div className="space-y-2">
+            <label className="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all"
+              style={{ borderColor: !isPaid ? '#006699' : '#e0e0e0', backgroundColor: !isPaid ? '#e6f2ff' : 'transparent' }}>
+              <input
+                type="radio"
+                checked={!isPaid}
+                onChange={() => setIsPaid(false)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-semibold text-navy">Not Paid</span>
+            </label>
+
+            <label className="flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all"
+              style={{ borderColor: isPaid ? '#10b981' : '#e0e0e0', backgroundColor: isPaid ? '#d1fae5' : 'transparent' }}>
+              <input
+                type="radio"
+                checked={isPaid}
+                onChange={() => setIsPaid(true)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-semibold text-navy">Paid</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Payment Method Selection (only if paid) */}
+        {isPaid && (
+          <div className="space-y-3 p-4 bg-green-50 rounded-lg border border-green-200">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Payment Method</p>
+            <div className="space-y-2">
+              {PAYMENT_METHODS.map((method) => (
+                <label key={method.value} className="flex items-center gap-3 p-3 border border-border rounded-lg cursor-pointer hover:bg-white transition-colors">
+                  <input
+                    type="radio"
+                    checked={paymentMethod === method.value}
+                    onChange={() => setPaymentMethod(method.value)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-semibold text-navy">{method.label}</span>
+                </label>
+              ))}
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-navy mb-1">Reference / Receipt No. (optional)</label>
+              <input
+                type="text"
+                value={paymentReference}
+                onChange={(e) => setPaymentReference(e.target.value)}
+                placeholder="e.g. check #, transfer ref, OR number…"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Warning if not paid */}
+        {!isPaid && (
+          <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
+            <p className="text-xs font-semibold text-amber-900 mb-1">⚠️ Accounts Receivable</p>
+            <p className="text-xs text-amber-800">
+              Since payment was not received, this amount will be recorded in Accounts Receivable. {customer?.store_name} will show as owing this amount.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button
+          onClick={onClose}
+          disabled={isConfirming}
+          className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleConfirm}
+          disabled={isConfirming}
+          className={`px-4 py-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50 ${
+            isPaid ? "bg-green" : "bg-accent-2"
+          }`}
+        >
+          {isConfirming ? "Processing…" : (isPaid ? "✓ Confirm Paid" : "✓ Confirm Not Paid")}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}

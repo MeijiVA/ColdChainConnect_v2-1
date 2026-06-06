@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1780071035102,
+      "tag": "0000_batch_pallet_refactor",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780071035103,
+      "tag": "0001_add_batch_name_and_cold_chain_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780071035104,
+      "tag": "0002_drop_payment_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780681620000,
+      "tag": "0003_update_bookings_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780681680000,
+      "tag": "0004_add_order_pallets",
+      "breakpoints": true
+    }
+  ]
+}
