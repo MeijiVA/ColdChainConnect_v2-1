@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RefreshCw, ChevronLeft, Truck as TruckIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { Delivery, DeliveryItem, Truck, Invoice, Customer, Driver, Agent, formatCustomerAddress } from "@shared/api";
 
@@ -46,7 +47,7 @@ function truckStatusLabel(status: string) {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export function DeliveryDispatch() {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   const [trucks,      setTrucks]      = useState<Truck[]>([]);
   const [drivers,     setDrivers]     = useState<Driver[]>([]);
@@ -60,10 +61,10 @@ export function DeliveryDispatch() {
 
   const [selectedTruck,        setSelectedTruck]        = useState<Truck | null>(null);
   const [selectedDelivery,     setSelectedDelivery]     = useState<DeliveryExt | null>(null);
+  const [deliveryView, setDeliveryView] = useState<"active" | "completed">("active");
   const [showAddTruckModal,    setShowAddTruckModal]    = useState(false);
   const [showEditTruckModal,   setShowEditTruckModal]   = useState(false);
   const [showAddDeliveryModal, setShowAddDeliveryModal] = useState(false);
-  const [showChangeDriverModal,setShowChangeDriverModal]= useState(false);
   const [showChangeTruckDriverModal, setShowChangeTruckDriverModal] = useState(false);
   const [showPaymentModal,     setShowPaymentModal]     = useState(false);
   const [paymentItem,          setPaymentItem]          = useState<{ delivery: DeliveryExt; item: DeliveryItemExt } | null>(null);
@@ -139,6 +140,9 @@ export function DeliveryDispatch() {
   const truckDeliveries = selectedTruck
     ? deliveries.filter((d) => d.truck_id === selectedTruck.id)
     : [];
+  const visibleTruckDeliveries = truckDeliveries.filter((delivery) =>
+    deliveryView === "completed" ? delivery.status === "completed" : delivery.status !== "completed"
+  );
 
   const handleConfirm = (delivery: DeliveryExt, item: DeliveryItemExt) => {
     setPaymentItem({ delivery, item });
@@ -175,6 +179,8 @@ export function DeliveryDispatch() {
 
   const handleCreateDelivery = async (
     destinations: { invoice_id: string; destination_customer_id: string }[],
+    driverId: string,
+    scheduledDate: string,
   ) => {
     if (!token || !selectedTruck) return;
     try {
@@ -184,6 +190,8 @@ export function DeliveryDispatch() {
         body: JSON.stringify({
           truck_id: selectedTruck.id,
           destinations,
+          driver_id: driverId || undefined,
+          scheduled_date: scheduledDate,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
@@ -191,6 +199,21 @@ export function DeliveryDispatch() {
       setShowAddDeliveryModal(false);
     } catch (err) {
       alert("Failed to create delivery: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleAssignDriver = async (deliveryId: string, driverId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/deliveries/${deliveryId}/assign`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ driver_id: driverId || null }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update delivery assignment.");
     }
   };
 
@@ -212,21 +235,6 @@ export function DeliveryDispatch() {
              !completedInvoiceIds.has(inv.id)
   );
 
-  const handleReleaseDelivery = async (deliveryId: string) => {
-    if (!token) return;
-    if (!confirm("Release this completed delivery? It will be removed from the list.")) return;
-    try {
-      const res = await fetch(`/api/deliveries/${deliveryId}`, {
-        method: "DELETE",
-        headers: authHeaders(token),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await fetchAll();
-    } catch (err) {
-      alert("Failed to release: " + (err instanceof Error ? err.message : String(err)));
-    }
-  };
-
   const selectTruck = (truck: Truck) => {
     setSelectedTruck(truck);
     setSelectedDelivery(null);
@@ -234,7 +242,7 @@ export function DeliveryDispatch() {
     setMobileView("detail");
   };
 
-  if (loading) return <div className="flex-1 px-6 py-8 text-sm text-muted">Loading deliveries…</div>;
+  if (loading) return <LoadingSpinner />;
 
   // ── Truck detail panel (shared between mobile and desktop) ─────────────────
   const DetailPanel = () => (
@@ -263,30 +271,6 @@ export function DeliveryDispatch() {
               Edit
             </button>
           </div>
-        </div>
-
-        {/* Agent */}
-        <div className="border-t border-border pt-3">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Agent</p>
-            {truckDeliveries.some((d) => d.status !== "completed") ? (
-              <span className="text-xs font-semibold text-accent-2 bg-accent-2/10 px-2 py-1 rounded">Locked</span>
-            ) : (
-              <button onClick={() => setShowChangeDriverModal(true)} className="text-xs font-semibold text-accent-2 hover:opacity-70">
-                Change
-              </button>
-            )}
-          </div>
-          {selectedTruck!.driver_id ? (
-            <div className="bg-off-white rounded-lg p-3">
-              <p className="font-semibold text-navy text-sm">{drivers.find((d) => d.id === selectedTruck!.driver_id)?.full_name || selectedTruck!.driver_id.slice(0, 8)}</p>
-              {drivers.find((d) => d.id === selectedTruck!.driver_id)?.contact_info && (
-                <p className="text-xs text-muted mt-0.5">{drivers.find((d) => d.id === selectedTruck!.driver_id)?.contact_info}</p>
-              )}
-            </div>
-          ) : (
-            <div className="bg-off-white rounded-lg p-3 text-center text-xs text-muted">No agent assigned</div>
-          )}
         </div>
 
         {/* Driver — assigned to the truck for this run */}
@@ -322,17 +306,28 @@ export function DeliveryDispatch() {
         </button>
       </div>
 
-      {/* Deliveries */}
-      <p className="text-xs font-semibold text-muted uppercase tracking-wider">
-        Deliveries ({truckDeliveries.length})
-      </p>
+      <div className="flex gap-2 border-b border-border">
+        {([
+          ["active", `Active (${truckDeliveries.filter((delivery) => delivery.status !== "completed").length})`],
+          ["completed", `Completed (${truckDeliveries.filter((delivery) => delivery.status === "completed").length})`],
+        ] as const).map(([view, label]) => (
+          <button
+            key={view}
+            type="button"
+            onClick={() => setDeliveryView(view)}
+            className={`border-b-2 px-3 py-2 text-sm font-semibold ${deliveryView === view ? "border-accent-2 text-accent-2" : "border-transparent text-muted"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {truckDeliveries.length === 0 ? (
+      {visibleTruckDeliveries.length === 0 ? (
         <div className="bg-white rounded-xl border border-border p-6 text-center text-sm text-muted">
-          No deliveries for this truck yet.
+          {deliveryView === "active" ? "No active deliveries for this truck." : "No completed deliveries for this truck yet."}
         </div>
       ) : (
-        truckDeliveries.map((delivery) => (
+        visibleTruckDeliveries.map((delivery) => (
           <div
             key={delivery.id}
             className={`bg-white rounded-xl border-2 overflow-hidden transition-all ${
@@ -352,14 +347,6 @@ export function DeliveryDispatch() {
                 <span className="text-xs text-muted flex-shrink-0">{delivery.delivery_items.length} stop{delivery.delivery_items.length !== 1 ? "s" : ""}</span>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                {delivery.status === "completed" && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleReleaseDelivery(delivery.id); }}
-                    className="px-2 py-1 text-xs font-semibold text-red border border-red/30 rounded hover:bg-red/10 transition-colors"
-                  >
-                    Release
-                  </button>
-                )}
                 <span className="text-xs text-muted hidden sm:block">
                   {new Date(delivery.created_at).toLocaleDateString("en-PH")}
                 </span>
@@ -370,21 +357,26 @@ export function DeliveryDispatch() {
               </div>
             </div>
 
-            {/* Driver / Agent badges */}
-            {(delivery.driver || delivery.agent) && (
-              <div className="flex items-center gap-3 px-4 pb-2 flex-wrap">
-                {delivery.driver && (
-                  <span className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-2.5 py-0.5">
-                    🚗 {delivery.driver.full_name || delivery.driver_id?.slice(0, 8)}
-                  </span>
-                )}
-                {delivery.agent && (
-                  <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5">
-                    👤 {delivery.agent.full_name || delivery.agent_id?.slice(0, 8)}
-                  </span>
-                )}
-              </div>
-            )}
+            <div className="flex items-center gap-3 px-4 pb-3 flex-wrap">
+              <span className="text-xs font-semibold text-muted">
+                Agent: <span className="font-medium text-navy">{delivery.agent?.full_name || "No linked agent"}</span>
+              </span>
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-muted">
+                Driver
+                <select
+                  value={delivery.driver_id ?? delivery.truck?.driver_id ?? ""}
+                  onChange={(event) => void handleAssignDriver(delivery.id, event.target.value)}
+                  className="rounded-md border border-border bg-white px-2 py-1 text-xs font-normal text-navy"
+                >
+                  <option value="">Unassigned</option>
+                  {drivers.filter((driver) => driver.is_active).map((driver) => (
+                    <option key={driver.id} value={driver.id}>
+                      {driver.full_name || driver.id.slice(0, 8)}{driver.id === delivery.truck?.driver_id ? " · truck default" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             {/* Delivery stops — card layout on mobile, table on md+ */}
             {selectedDelivery?.id === delivery.id && (
@@ -660,29 +652,6 @@ export function DeliveryDispatch() {
         />
       )}
 
-      {showChangeDriverModal && selectedTruck && (
-        <ChangeDriverModal
-          truck={selectedTruck}
-          drivers={drivers}
-          token={token!}
-          onClose={() => setShowChangeDriverModal(false)}
-          onSave={async (driverId) => {
-            try {
-              const res = await fetch(`/api/trucks/${selectedTruck.id}`, {
-                method: "PATCH",
-                headers: authHeaders(token!),
-                body: JSON.stringify({ driver_id: driverId }),
-              });
-              if (!res.ok) throw new Error(await res.text());
-              await fetchAll();
-              setShowChangeDriverModal(false);
-            } catch (err) {
-              alert("Failed to update agent: " + (err instanceof Error ? err.message : String(err)));
-            }
-          }}
-        />
-      )}
-
       {showChangeTruckDriverModal && selectedTruck && (
         <ChangeTruckDriverModal
           truck={selectedTruck}
@@ -711,6 +680,8 @@ export function DeliveryDispatch() {
           truck={selectedTruck}
           eligibleInvoices={eligibleInvoices}
           customers={customers}
+          agents={agents}
+          drivers={drivers}
           onClose={() => setShowAddDeliveryModal(false)}
           onSave={handleCreateDelivery}
         />
@@ -731,9 +702,6 @@ export function DeliveryDispatch() {
 }
 
 // ─── Change Truck Driver Modal ────────────────────────────────────────────────
-// Mirrors the existing ChangeDriverModal (for agents) but targets the Driver
-// field on the truck — populated from the drivers table in the DB.
-
 function ChangeTruckDriverModal({ truck, drivers, token, onClose, onSave }: {
   truck: Truck; drivers: Driver[]; token: string; onClose: () => void; onSave: (id: string) => Promise<void>;
 }) {
@@ -850,7 +818,7 @@ function AddTruckModal({ drivers, token, onClose, onCreated }: {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-navy mb-1">Assign Agent (Optional)</label>
+          <label className="block text-xs font-semibold text-navy mb-1">Assign Driver (Optional)</label>
           <select value={selectedDriverId} onChange={(e) => setSelectedDriverId(e.target.value)}
             className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
             <option value="">No agent assigned</option>
@@ -933,54 +901,23 @@ function EditTruckModal({ truck, token, onClose, onSaved }: {
   );
 }
 
-// ─── Change Driver Modal ──────────────────────────────────────────────────────
-
-function ChangeDriverModal({ truck, drivers, token, onClose, onSave }: {
-  truck: Truck; drivers: Driver[]; token: string; onClose: () => void; onSave: (id: string) => Promise<void>;
-}) {
-  const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id || "");
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!selectedDriverId) { alert("Please select an agent"); return; }
-    setSaving(true);
-    try { await onSave(selectedDriverId); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <ModalShell title={`Change Agent — ${truck.license_plate}`} onClose={onClose}>
-      <div>
-        <label className="block text-xs font-semibold text-navy mb-2">Select Agent *</label>
-        <select value={selectedDriverId} onChange={(e) => setSelectedDriverId(e.target.value)}
-          className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:border-accent-2">
-          <option value="">Choose an agent…</option>
-          {drivers.filter((d) => d.is_active).map((d) => (
-            <option key={d.id} value={d.id}>{d.full_name || d.id.slice(0, 8)}{d.contact_info && ` — ${d.contact_info}`}</option>
-          ))}
-        </select>
-      </div>
-      <div className="flex justify-end gap-2 pt-4 border-t border-border">
-        <button onClick={onClose} className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-off-white">Cancel</button>
-        <button onClick={handleSave} disabled={!selectedDriverId || saving}
-          className="px-4 py-2 bg-accent-2 text-white rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-          {saving ? "Updating…" : "Change Agent"}
-        </button>
-      </div>
-    </ModalShell>
-  );
-}
-
 // ─── Add Delivery Modal ────────────────────────────────────────────────────────
 
-function AddDeliveryModal({ truck, eligibleInvoices, customers, onClose, onSave }: {
+function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers, onClose, onSave }: {
   truck: Truck;
   eligibleInvoices: Invoice[];
   customers: Customer[];
+  agents: Agent[];
+  drivers: Driver[];
   onClose: () => void;
-  onSave: (d: { invoice_id: string; destination_customer_id: string }[]) => Promise<void>;
+  onSave: (d: { invoice_id: string; destination_customer_id: string }[], driverId: string, scheduledDate: string) => Promise<void>;
 }) {
   const [stops, setStops] = useState([{ invoice_id: "" }]);
+  const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id ?? "");
+  const [scheduledDate, setScheduledDate] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  });
   const [saving, setSaving] = useState(false);
 
   function customerFor(inv: Invoice): Customer | undefined {
@@ -988,6 +925,10 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, onClose, onSave 
   }
 
   const districtInvoices = eligibleInvoices.filter((inv) => customerFor(inv)?.district === truck.district);
+  const selectedInvoices = stops.map((stop) => districtInvoices.find((invoice) => invoice.id === stop.invoice_id)).filter((invoice): invoice is Invoice => Boolean(invoice));
+  const saleOwnerIds = new Set(selectedInvoices.map((invoice) => invoice.agent_id));
+  const saleOwnerId = saleOwnerIds.size === 1 ? [...saleOwnerIds][0] : null;
+  const saleAgent = agents.find((agent) => agent.user_id === saleOwnerId);
 
   // Build a label for each eligible invoice: "Store Name — Contact Person"
   function orderLabel(inv: Invoice): string {
@@ -1017,7 +958,7 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, onClose, onSave 
       };
     });
 
-  const valid = stops.every((s) => {
+  const valid = saleOwnerIds.size <= 1 && stops.every((s) => {
     if (!s.invoice_id) return false;
     const inv = districtInvoices.find((i) => i.id === s.invoice_id);
     if (!inv) return false;
@@ -1028,15 +969,44 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, onClose, onSave 
   const pickedIds = new Set(stops.map((s) => s.invoice_id).filter(Boolean));
 
   const handleSave = async () => {
-    if (!valid) { alert("All stops need a valid order with a matched customer."); return; }
+    if (!valid || !scheduledDate) { alert("Choose a scheduled date and valid order stops."); return; }
     setSaving(true);
-    try { await onSave(buildPayload()); }
+    try { await onSave(buildPayload(), selectedDriverId, scheduledDate); }
     finally { setSaving(false); }
   };
 
   return (
     <ModalShell title={`Add Delivery — ${truck.license_plate}`} onClose={onClose}>
       <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-semibold text-navy mb-1">Scheduled Date *</label>
+          <input
+            type="date"
+            value={scheduledDate}
+            onChange={(event) => setScheduledDate(event.target.value)}
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:border-accent-2"
+          />
+        </div>
+        <div className="rounded-lg bg-off-white px-3 py-2.5">
+          <p className="text-xs font-semibold text-muted">Sale owner · automatically assigned</p>
+          <p className="mt-1 text-sm font-semibold text-navy">{saleAgent?.full_name || (saleOwnerId ? "No linked agent profile" : "Select an order")}</p>
+          {saleOwnerIds.size > 1 && <p className="mt-1 text-xs text-red">One delivery run can include sales from only one agent.</p>}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-navy mb-1">Assign Driver (Optional)</label>
+          <select
+            value={selectedDriverId}
+            onChange={(event) => setSelectedDriverId(event.target.value)}
+            className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-navy focus:outline-none focus:border-accent-2"
+          >
+            <option value="">No driver assigned</option>
+            {drivers.filter((driver) => driver.is_active).map((driver) => (
+              <option key={driver.id} value={driver.id}>
+                {driver.full_name || driver.id.slice(0, 8)}{driver.id === truck.driver_id ? " · truck default" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold text-navy">Delivery Stops *</label>

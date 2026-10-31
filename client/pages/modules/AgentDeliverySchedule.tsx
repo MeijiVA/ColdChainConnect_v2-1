@@ -1,21 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarDays, Clock3, MapPin, PackageCheck, Phone, RefreshCw, Truck as TruckIcon } from "lucide-react";
-import { Agent, Customer, Delivery, DeliveryItem, Invoice, Pallet, Truck, formatCustomerAddress } from "@shared/api";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { CalendarDays, Clock3, MapPin, PackageCheck, Phone, RefreshCw, Truck as TruckIcon, UserRound } from "lucide-react";
+import type { AgentScheduleDelivery, AgentScheduleResponse, AgentScheduleStop, DeliveryItem } from "@shared/api";
+import { formatCustomerAddress } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "@/components/ui/button";
-
-interface ScheduleStop extends DeliveryItem {
-  customer: Customer | null;
-  invoice: Invoice | null;
-  pallets: Pallet[];
-}
-
-interface ScheduleDelivery extends Delivery {
-  scheduled_date?: string | null;
-  truck?: Truck | null;
-  delivery_items?: ScheduleStop[];
-}
 
 function formatScheduleDate(value: string) {
   const [year, month, day] = value.split("-").map(Number);
@@ -34,57 +24,27 @@ function statusClasses(status: DeliveryItem["status"]) {
 }
 
 export function AgentDeliverySchedule() {
-  const { token, user } = useAuth();
-  const [deliveries, setDeliveries] = useState<ScheduleDelivery[]>([]);
+  const { token } = useAuth();
+  const [deliveries, setDeliveries] = useState<AgentScheduleDelivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [view, setView] = useState<"current" | "history">("current");
+  const [paymentStop, setPaymentStop] = useState<{ delivery: AgentScheduleDelivery; stop: AgentScheduleStop } | null>(null);
+  const [confirmingStopId, setConfirmingStopId] = useState<string | null>(null);
 
   const fetchSchedule = async () => {
-    if (!token || !user) return;
+    if (!token) return;
     setIsLoading(true);
     setError("");
 
     try {
-      const headers = { Authorization: `Bearer ${token}` };
-      const [agentRes, deliveryRes, truckRes, customerRes, invoiceRes, palletRes] = await Promise.all([
-        fetch("/api/agents", { headers }),
-        fetch("/api/deliveries", { headers }),
-        fetch("/api/trucks", { headers }),
-        fetch("/api/customers", { headers }),
-        fetch("/api/invoices", { headers }),
-        fetch("/api/pallets", { headers }),
-      ]);
+      const response = await fetch("/api/agent-schedule", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error("Could not load your delivery schedule.");
 
-      if ([agentRes, deliveryRes, truckRes, customerRes, invoiceRes, palletRes].some((response) => !response.ok)) {
-        throw new Error("Could not load your delivery schedule.");
-      }
-
-      const [agents, allDeliveries, trucks, customers, invoices, pallets] = await Promise.all([
-        agentRes.json() as Promise<Agent[]>,
-        deliveryRes.json() as Promise<ScheduleDelivery[]>,
-        truckRes.json() as Promise<Truck[]>,
-        customerRes.json() as Promise<Customer[]>,
-        invoiceRes.json() as Promise<Invoice[]>,
-        palletRes.json() as Promise<Pallet[]>,
-      ]);
-
-      const agent = agents.find((item) => item.user_id === user.id);
-      const assigned = agent
-        ? allDeliveries.filter((delivery) => delivery.agent_id === agent.id)
-        : [];
-
-      setDeliveries(assigned.map((delivery) => ({
-        ...delivery,
-        truck: trucks.find((truck) => truck.id === delivery.truck_id) ?? null,
-        delivery_items: (delivery.delivery_items ?? []).map((stop) => ({
-          ...stop,
-          customer: customers.find((customer) => customer.id === stop.destination_customer_id) ?? null,
-          invoice: invoices.find((invoice) => invoice.id === stop.invoice_id) ?? null,
-          pallets: pallets.filter((pallet) =>
-            pallet.order_id === invoices.find((invoice) => invoice.id === stop.invoice_id)?.booking_id,
-          ),
-        })),
-      })));
+      const schedule = await response.json() as AgentScheduleResponse;
+      setDeliveries(schedule.deliveries);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : "Could not load your delivery schedule.");
     } finally {
@@ -94,24 +54,49 @@ export function AgentDeliverySchedule() {
 
   useEffect(() => {
     void fetchSchedule();
-  }, [token, user?.id]);
+  }, [token]);
 
+  const currentDeliveries = deliveries.filter((delivery) => delivery.status !== "completed");
+  const historyDeliveries = deliveries.filter((delivery) => delivery.status === "completed");
+  const visibleDeliveries = view === "current" ? currentDeliveries : historyDeliveries;
   const scheduledDays = useMemo(() => {
-    const groups = new Map<string, ScheduleDelivery[]>();
-    for (const delivery of deliveries) {
+    const groups = new Map<string, AgentScheduleDelivery[]>();
+    for (const delivery of visibleDeliveries) {
       const date = delivery.scheduled_date ?? delivery.created_at.slice(0, 10);
       groups.set(date, [...(groups.get(date) ?? []), delivery]);
     }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [deliveries]);
+    return [...groups.entries()].sort(([a], [b]) => view === "current" ? a.localeCompare(b) : b.localeCompare(a));
+  }, [view, visibleDeliveries]);
 
-  const stopCount = deliveries.reduce((total, delivery) => total + (delivery.delivery_items?.length ?? 0), 0);
-  const completedCount = deliveries.reduce(
+  const stopCount = currentDeliveries.reduce((total, delivery) => total + (delivery.delivery_items?.length ?? 0), 0);
+  const completedCount = currentDeliveries.reduce(
     (total, delivery) => total + (delivery.delivery_items ?? []).filter((stop) => stop.status === "completed").length,
     0,
   );
 
-  if (isLoading) return <div className="p-6 text-gray-500">Loading your delivery schedule…</div>;
+  const confirmDelivery = async (isPaid: boolean, paymentMethod?: string, paymentReference?: string) => {
+    if (!token || !paymentStop) return;
+    setConfirmingStopId(paymentStop.stop.id);
+    try {
+      const response = await fetch(`/api/deliveries/${paymentStop.delivery.id}/items/${paymentStop.stop.id}/confirm`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ is_paid: isPaid, payment_method: paymentMethod, payment_reference: paymentReference }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Could not confirm delivery.");
+      }
+      setPaymentStop(null);
+      await fetchSchedule();
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : "Could not confirm delivery.");
+    } finally {
+      setConfirmingStopId(null);
+    }
+  };
+
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div className="flex-1 flex flex-col gap-5 p-4 pb-24 md:p-6 md:pb-6">
@@ -126,32 +111,40 @@ export function AgentDeliverySchedule() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-white p-3 sm:p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Assigned runs</p>
-          <p className="mt-1 font-rajdhani text-3xl font-bold text-navy">{deliveries.length}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-white p-3 sm:p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Total stops</p>
-          <p className="mt-1 font-rajdhani text-3xl font-bold text-navy">{stopCount}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-white p-3 sm:p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Completed</p>
-          <p className="mt-1 font-rajdhani text-3xl font-bold text-green">{completedCount}</p>
-        </div>
-        <div className="rounded-xl border border-border bg-white p-3 sm:p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Remaining</p>
-          <p className="mt-1 font-rajdhani text-3xl font-bold text-accent-2">{stopCount - completedCount}</p>
-        </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          ["Assigned runs", currentDeliveries.length],
+          ["Stops", stopCount],
+          ["Completed", completedCount],
+          ["Remaining", stopCount - completedCount],
+        ].map(([label, count], index) => (
+          <div key={label} className="flex items-center justify-between gap-2 rounded-lg bg-white px-3 py-2.5">
+            <span className="text-xs font-medium text-muted">{label}</span>
+            <span className={`font-rajdhani text-xl font-bold ${index === 2 ? "text-green" : index === 3 ? "text-accent-2" : "text-navy"}`}>{count}</span>
+          </div>
+        ))}
       </div>
 
-      {error && <div className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">{error}</div>}
+      <div className="flex gap-2 border-b border-border">
+        {([ ["current", `Current schedule (${currentDeliveries.length})`], ["history", `History (${historyDeliveries.length})`] ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setView(value)}
+            className={`border-b-2 px-3 py-2 text-sm font-semibold ${view === value ? "border-accent-2 text-accent-2" : "border-transparent text-muted"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {deliveries.length === 0 ? (
+      {error && <div role="alert" className="rounded-lg border border-red/30 bg-red/10 px-4 py-3 text-sm text-red">{error}</div>}
+
+      {visibleDeliveries.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-white p-8 text-center">
           <CalendarDays size={32} className="mx-auto mb-3 text-muted opacity-50" />
-          <h2 className="font-semibold text-navy">No deliveries assigned yet</h2>
-          <p className="mt-1 text-sm text-muted">Your dispatcher’s assigned delivery runs will appear here.</p>
+          <h2 className="font-semibold text-navy">{view === "current" ? "No current deliveries" : "No delivery history yet"}</h2>
+          <p className="mt-1 text-sm text-muted">{view === "current" ? "Your active assigned runs will appear here." : "Completed delivery runs will be saved here."}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-6">
@@ -170,6 +163,16 @@ export function AgentDeliverySchedule() {
                         {delivery.truck?.license_plate ?? "Truck not assigned"}
                       </span>
                       {delivery.truck?.district && <span className="text-muted">{delivery.truck.district}</span>}
+                      {delivery.agent && (
+                        <span className="inline-flex items-center gap-1 text-muted">
+                          <UserRound size={14} /> Agent: {delivery.agent.full_name || "Assigned"}
+                        </span>
+                      )}
+                      {delivery.driver && (
+                        <span className="inline-flex items-center gap-1 text-muted">
+                          <UserRound size={14} /> Driver: {delivery.driver.full_name || "Assigned"}
+                        </span>
+                      )}
                     </div>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${statusClasses(delivery.status)}`}>
                       {delivery.status.replace("_", " ")}
@@ -178,9 +181,12 @@ export function AgentDeliverySchedule() {
 
                   <ol className="divide-y divide-border">
                     {(delivery.delivery_items ?? []).map((stop, index) => {
-                      const customer = stop.customer;
+                      const customer = stop.destination_customer;
                       const address = customer ? formatCustomerAddress(customer) : "Address unavailable";
-                      const mapQuery = encodeURIComponent([customer?.store_name, address].filter(Boolean).join(", "));
+                      const destination = customer?.latitude != null && customer.longitude != null
+                        ? `${customer.latitude},${customer.longitude}`
+                        : [customer?.store_name, address].filter(Boolean).join(", ");
+                      const mapQuery = encodeURIComponent(destination);
                       const invoiceLabel = stop.invoice?.receipt_number ?? stop.invoice_id.slice(0, 8);
 
                       return (
@@ -201,9 +207,10 @@ export function AgentDeliverySchedule() {
                             </div>
                             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
                               <span className="inline-flex items-center gap-1"><PackageCheck size={14} /> Invoice {invoiceLabel}</span>
+                              {stop.sale_agent && <span>Sale by {stop.sale_agent.username}</span>}
                               {customer?.contact_info && <a href={`tel:${customer.contact_info}`} className="inline-flex items-center gap-1 text-navy hover:underline"><Phone size={14} />{customer.contact_info}</a>}
-                              <a href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold text-accent hover:underline">
-                                <MapPin size={14} /> Open in Maps
+                              <a href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`} target="_blank" rel="noreferrer" className="mt-4 flex min-h-16 w-full items-center justify-center gap-2 rounded-xl bg-accent-2 px-5 py-4 text-base font-bold text-white shadow-md transition hover:bg-accent active:scale-[0.99]">
+                                <MapPin size={20} /> Open in Maps
                               </a>
                               {delivery.scheduled_date && <span className="inline-flex items-center gap-1"><Clock3 size={14} /> Scheduled run</span>}
                             </div>
@@ -230,6 +237,22 @@ export function AgentDeliverySchedule() {
                               ) : (
                                 <p className="mt-1 text-xs text-muted">No pallets created for this order yet.</p>
                               )}
+                              {stop.status === "completed" ? (
+                                <p className={`mt-3 text-xs font-semibold ${stop.is_paid ? "text-green" : "text-amber-700"}`}>
+                                  {stop.is_paid ? `Paid${stop.payment_method ? ` · ${stop.payment_method.replace("_", " ")}` : ""}` : "Not paid · recorded in Accounts Receivable"}
+                                </p>
+                              ) : stop.pallets.length > 0 && stop.pallets.every((pallet) => pallet.status === "shipped") ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setPaymentStop({ delivery, stop })}
+                                  disabled={confirmingStopId === stop.id}
+                                  className="mt-3 min-h-12 w-full rounded-lg bg-green px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+                                >
+                                  Confirm delivery & payment
+                                </button>
+                              ) : (
+                                <p className="mt-3 text-xs text-muted">Delivery confirmation is available once all pallets are shipped.</p>
+                              )}
                             </div>
                           </div>
                         </li>
@@ -242,6 +265,69 @@ export function AgentDeliverySchedule() {
           ))}
         </div>
       )}
+      {paymentStop && (
+        <DeliveryPaymentPrompt
+          stop={paymentStop.stop}
+          isConfirming={confirmingStopId === paymentStop.stop.id}
+          onClose={() => setPaymentStop(null)}
+          onConfirm={confirmDelivery}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeliveryPaymentPrompt({ stop, isConfirming, onClose, onConfirm }: {
+  stop: AgentScheduleStop;
+  isConfirming: boolean;
+  onClose: () => void;
+  onConfirm: (isPaid: boolean, paymentMethod?: string, paymentReference?: string) => Promise<void>;
+}) {
+  const [isPaid, setIsPaid] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentReference, setPaymentReference] = useState("");
+  const paymentMethods = [
+    ["cash", "Cash"],
+    ["check", "Check"],
+    ["bank_transfer", "Bank transfer"],
+    ["online", "Online payment"],
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4">
+      <section role="dialog" aria-modal="true" aria-labelledby="delivery-payment-title" className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:max-w-lg sm:rounded-2xl">
+        <h2 id="delivery-payment-title" className="font-rajdhani text-xl font-bold text-navy">Confirm delivery</h2>
+        <p className="mt-2 text-sm text-muted">Was payment received from {stop.destination_customer.store_name}?</p>
+        {stop.invoice && (
+          <p className="mt-2 text-sm font-semibold text-navy">
+            Invoice {stop.invoice.receipt_number || stop.invoice.id.slice(0, 8)} · Amount due ₱{Number(stop.invoice.total_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </p>
+        )}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setIsPaid(true)} className={`min-h-12 rounded-lg border-2 font-semibold ${isPaid ? "border-green bg-green/10 text-green" : "border-border text-navy"}`}>Paid</button>
+          <button type="button" onClick={() => setIsPaid(false)} className={`min-h-12 rounded-lg border-2 font-semibold ${!isPaid ? "border-accent-2 bg-blue-50 text-accent-2" : "border-border text-navy"}`}>Not paid</button>
+        </div>
+        {isPaid ? (
+          <div className="mt-4 space-y-3 rounded-lg bg-green-50 p-4">
+            <label className="block text-xs font-semibold text-navy">
+              Payment method
+              <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-normal">
+                {paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className="block text-xs font-semibold text-navy">
+              Reference / receipt number (optional)
+              <input value={paymentReference} onChange={(event) => setPaymentReference(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm font-normal" />
+            </label>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">This unpaid amount will be recorded in Accounts Receivable.</p>
+        )}
+        <div className="mt-5 flex gap-2 border-t border-border pt-4">
+          <button type="button" onClick={onClose} disabled={isConfirming} className="min-h-11 flex-1 rounded-lg border border-border px-4 text-sm font-semibold text-navy disabled:opacity-50">Cancel</button>
+          <button type="button" onClick={() => void onConfirm(isPaid, isPaid ? paymentMethod : undefined, isPaid ? paymentReference : undefined)} disabled={isConfirming} className="min-h-11 flex-1 rounded-lg bg-green px-4 text-sm font-bold text-white disabled:opacity-50">{isConfirming ? "Saving…" : "Confirm delivery"}</button>
+        </div>
+      </section>
     </div>
   );
 }

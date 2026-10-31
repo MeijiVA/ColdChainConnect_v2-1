@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { DriverSchedule, DriverScheduleStop } from "@shared/api";
 import { DriverStopCard } from "./DriverStopCard";
 
@@ -16,6 +17,7 @@ function shiftDate(isoDate: string, days: number) {
 
 export function DriverScheduleView({ driverId }: { driverId?: string }) {
   const token = useAuth((state) => state.token);
+  const finishPostLoginLoading = useAuth((state) => state.finishPostLoginLoading);
   const [date, setDate] = useState(() => toIsoDate(new Date()));
   const [schedule, setSchedule] = useState<DriverSchedule | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +44,10 @@ export function DriverScheduleView({ driverId }: { driverId?: string }) {
         setError(null);
       })
       .catch((err: Error) => setError(err.message))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        finishPostLoginLoading();
+      });
   }, [token, date, driverId]);
 
   const stops: DriverScheduleStop[] = schedule?.deliveries.flatMap((run) => run.delivery_items) ?? [];
@@ -73,7 +78,7 @@ export function DriverScheduleView({ driverId }: { driverId?: string }) {
       </div>
 
       {error && <p className="text-sm text-red">{error}</p>}
-      {isLoading && !schedule && <p className="text-sm text-muted">Loading schedule…</p>}
+      {isLoading && !schedule && <LoadingSpinner className="min-h-24" />}
 
       {schedule && !error && (
         <>

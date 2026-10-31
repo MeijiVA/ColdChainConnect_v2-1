@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -7,6 +8,7 @@ import { RefreshCw, Plus, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { Booking, Truck, Customer, Product } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useSearchParams } from "react-router-dom";
 import { AddOrderModal } from "./AddOrderModal";
 import { AgentOrderScreen } from "./AgentOrderScreen";
 import { OrderTotalsBreakdown } from "@/components/OrderTotalsBreakdown";
@@ -20,7 +22,7 @@ export function BookingSummary() {
   const [productStock, setProductStock] = useState<Record<string, number>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { token, logout, user } = useAuth();
+  const { token, logout, user, finishPostLoginLoading } = useAuth();
   const isAgent = user?.role === "agent";
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -52,6 +54,22 @@ export function BookingSummary() {
   const [orderItems, setOrderItems] = useState<{ product_id: string; qty_ordered: number }[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const requestedStatus = searchParams.get("status");
+    if (["pending", "approved", "prep", "ready"].includes(requestedStatus ?? "")) {
+      setStatusFilter(requestedStatus as "pending" | "approved" | "prep" | "ready");
+      setDateRangeFilter("all");
+    }
+
+    if (!isAgent && searchParams.get("action") === "new") {
+      setShowAddModal(true);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("action");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [isAgent, searchParams, setSearchParams]);
 
   const fetchAll = async () => {
     try {
@@ -72,6 +90,7 @@ export function BookingSummary() {
       setError(err instanceof Error ? err.message : "Error loading data");
     } finally {
       setIsLoading(false);
+      finishPostLoginLoading();
     }
   };
 
@@ -281,9 +300,9 @@ export function BookingSummary() {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to approve booking");
       }
-      const { booking: updated, invoice } = await res.json();
+      const { booking: updated } = await res.json();
       setBookings((prev) => prev.map((b) => b.id === updated.id ? updated : b));
-      setApproveSuccess(invoice ? `Invoice #${invoice.id.slice(0, 8)} created successfully.` : "Order approved and truck assigned.");
+      setApproveSuccess("Order approved. The invoice will be created after stock picking is complete.");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to approve booking");
     } finally {
@@ -347,7 +366,7 @@ export function BookingSummary() {
     }
   };
 
-  if (isLoading) return <div className="flex-1 px-6 py-8 text-sm text-muted">Loading…</div>;
+  if (isLoading) return <LoadingSpinner />;
 
   if (isAgent) {
     return (

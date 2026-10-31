@@ -18,6 +18,8 @@ interface AuthStore {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isPostLoginLoading: boolean;
+  postLoginStartedAt: number | null;
   error: string | null;
   login: (credentials: LoginRequest) => Promise<MfaChallengeResponse | null>;
   setupMfa: (challengeToken: string) => Promise<MfaSetupResponse>;
@@ -25,6 +27,7 @@ interface AuthStore {
   logout: () => Promise<void>;
   setToken: (token: string | null) => void;
   setUser: (user: AuthUser | null) => void;
+  finishPostLoginLoading: () => void;
 }
 
 const AUTH_TOKEN_KEY = "auth_token";
@@ -73,6 +76,7 @@ async function readErrorMessage(response: Response, fallback: string): Promise<s
 
 function completeSignIn(
   set: (partial: Partial<AuthStore>) => void,
+  get: () => AuthStore,
   data: LoginResponse
 ) {
   const normalizedUser: AuthUser = {
@@ -82,12 +86,21 @@ function completeSignIn(
   };
 
   persistAuth(data.token, normalizedUser);
+  const startedAt = Date.now();
   set({
     token: data.token,
     user: normalizedUser,
     isAuthenticated: true,
     isLoading: false,
+    isPostLoginLoading: true,
+    postLoginStartedAt: startedAt,
   });
+
+  window.setTimeout(() => {
+    if (get().postLoginStartedAt === startedAt) {
+      set({ isPostLoginLoading: false, postLoginStartedAt: null });
+    }
+  }, 5000);
 }
 
 export const useAuth = create<AuthStore>((set, get) => {
@@ -98,6 +111,8 @@ export const useAuth = create<AuthStore>((set, get) => {
     token: storedToken,
     isAuthenticated: Boolean(storedToken),
     isLoading: false,
+    isPostLoginLoading: false,
+    postLoginStartedAt: null,
     error: null,
 
     login: async (credentials) => {
@@ -121,7 +136,7 @@ export const useAuth = create<AuthStore>((set, get) => {
           return data;
         }
 
-        completeSignIn(set, data);
+        completeSignIn(set, get, data);
         return null;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Login failed";
@@ -155,7 +170,7 @@ export const useAuth = create<AuthStore>((set, get) => {
           throw new Error(await readErrorMessage(response, "Verification failed"));
         }
 
-        completeSignIn(set, (await response.json()) as LoginResponse);
+        completeSignIn(set, get, (await response.json()) as LoginResponse);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Verification failed";
         set({ error: message, isLoading: false });
@@ -184,6 +199,8 @@ export const useAuth = create<AuthStore>((set, get) => {
           token: null,
           isAuthenticated: false,
           isLoading: false,
+          isPostLoginLoading: false,
+          postLoginStartedAt: null,
           error: null,
         });
       }
@@ -203,5 +220,18 @@ export const useAuth = create<AuthStore>((set, get) => {
       persistAuth(token, user);
       set({ user });
     },
+
+    finishPostLoginLoading: () => {
+      const startedAt = get().postLoginStartedAt;
+      if (!get().isPostLoginLoading || startedAt === null) return;
+
+      const delay = Math.max(0, 600 - (Date.now() - startedAt));
+      window.setTimeout(() => {
+        if (get().postLoginStartedAt === startedAt) {
+          set({ isPostLoginLoading: false, postLoginStartedAt: null });
+        }
+      }, delay);
+    },
+
   };
 });

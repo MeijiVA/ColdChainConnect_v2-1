@@ -13,11 +13,13 @@ import { InformationManagement } from "./pages/InformationManagement";
 import { ManageAccounts } from "./pages/ManageAccounts";
 import { BookingDispatch } from "./pages/BookingDispatch";
 import { AuditLogPage } from "./pages/AuditLog";
+import { Reports } from "./pages/Reports";
 import { SearchResults } from "./pages/SearchResults";
 import { DriverSchedule } from "./pages/DriverSchedule";
 import { Topbar } from "./components/Topbar";
+import { AdminNavigation } from "./components/AdminNavigation";
+import { PostLoginLoadingScreen } from "./components/auth/PostLoginLoadingScreen";
 import { BottomNavBar } from "./components/BottomNavBar";
-import { SalesForecastWidget } from "./components/SalesForecastWidget";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex flex-col min-h-screen">
       <Topbar userName={user?.username || "User"} onLogout={logout} />
+      <AdminNavigation />
       <div className="flex flex-1">
         <div className="flex-1 flex flex-col bg-off-white min-w-0 pb-32 md:pb-0 animate-fade-in">
           {children}
@@ -39,12 +42,12 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
 };
 
 /** Agent layout: topbar only, no bottom nav, no back-to-dashboard */
-const AgentLayout = ({ children }: { children: React.ReactNode }) => {
+const AgentLayout = ({ children, agentMode = false }: { children: React.ReactNode; agentMode?: boolean }) => {
   const { logout, user } = useAuth();
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className={agentMode ? "flex h-dvh min-h-0 flex-col overflow-hidden" : "flex flex-col min-h-screen"}>
       <Topbar userName={user?.username || "User"} onLogout={logout} agentMode />
-      <div className="flex-1 flex flex-col bg-off-white min-w-0 animate-fade-in">
+      <div className={`flex-1 flex flex-col bg-off-white min-w-0 animate-fade-in ${agentMode ? "min-h-0" : ""}`}>
         {children}
       </div>
     </div>
@@ -75,7 +78,7 @@ const AppContent = () => {
         <Route
           path="/booking-dispatch/*"
           element={
-            <AgentLayout>
+            <AgentLayout agentMode>
               <BookingDispatch />
             </AgentLayout>
           }
@@ -96,11 +99,17 @@ const AppContent = () => {
       <Route path="/manage-accounts/*" element={isAuthenticated ? <AppLayout><ManageAccounts /></AppLayout> : <Login />} />
       <Route path="/booking-dispatch/*" element={isAuthenticated ? <AppLayout><BookingDispatch /></AppLayout> : <Login />} />
       <Route path="/audit" element={isAuthenticated ? <AppLayout><AuditLogPage /></AppLayout> : <Login />} />
+      <Route path="/reports" element={isAuthenticated ? <AppLayout><Reports /></AppLayout> : <Login />} />
       <Route path="/search" element={isAuthenticated ? <AppLayout><SearchResults /></AppLayout> : <Login />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
+
+function PostLoginLoadingGate() {
+  const isPostLoginLoading = useAuth((state) => state.isPostLoginLoading);
+  return isPostLoginLoading ? <PostLoginLoadingScreen /> : null;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -109,7 +118,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AppContent />
-        <SalesForecastWidget />
+        <PostLoginLoadingGate />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

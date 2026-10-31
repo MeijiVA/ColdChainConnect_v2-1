@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
 import { randomUUID } from "crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { deliveries, delivery_items, accounts_receivable, invoices, agents, customers, trucks } from "../db/schema";
 import { AuthRequest } from "../middleware/auth";
@@ -73,9 +73,9 @@ export const createDelivery: RequestHandler = async (
   req: AuthRequest,
   res
 ) => {
-  const { truck_id, destinations, driver_id, agent_id, scheduled_date } = req.body;
+  const { truck_id, destinations, driver_id, scheduled_date } = req.body;
 
-  if (!truck_id || !destinations || !Array.isArray(destinations)) {
+  if (!truck_id || !Array.isArray(destinations) || destinations.length === 0) {
     return res.status(400).json({
       error: "Truck ID and destinations array are required",
     });
@@ -102,27 +102,41 @@ export const createDelivery: RequestHandler = async (
       }
     }
 
-    const deliveryId = randomUUID();
-
-    // If the caller is an agent, resolve their agent profile id and lock it in.
-    // An admin can supply agent_id manually; if omitted it stays null.
-    let resolvedAgentId: string | null = agent_id ?? null;
-
-    if (req.user?.role === "agent") {
-      // Look up the agent row that corresponds to the logged-in user
-      const agentProfile = await db.query.agents.findFirst({
-        where: eq(agents.user_id, req.user.userId),
-      });
-      if (agentProfile) {
-        resolvedAgentId = agentProfile.id;
-      }
+    const invoiceIds = [...new Set(destinations.map((destination: { invoice_id: string }) => destination.invoice_id))];
+    if (invoiceIds.length !== destinations.length) {
+      return res.status(400).json({ error: "An invoice can only appear once in a delivery run" });
     }
+
+    const saleInvoices = await db
+      .select({ id: invoices.id, agent_id: invoices.agent_id })
+      .from(invoices)
+      .where(inArray(invoices.id, invoiceIds));
+    if (saleInvoices.length !== invoiceIds.length) {
+      return res.status(400).json({ error: "Every delivery stop must reference a valid invoice" });
+    }
+
+    const saleOwnerIds = [...new Set(saleInvoices.map((invoice) => invoice.agent_id))];
+    if (saleOwnerIds.length !== 1) {
+      return res.status(400).json({ error: "A delivery run can only contain sales placed by one agent" });
+    }
+
+    const saleOwnerId = saleOwnerIds[0];
+    if (req.user?.role === "agent" && saleOwnerId !== req.user.userId) {
+      return res.status(403).json({ error: "You can only dispatch sales you placed" });
+    }
+
+    const saleAgent = await db.query.agents.findFirst({
+      where: eq(agents.user_id, saleOwnerId),
+      columns: { id: true },
+    });
+    const resolvedAgentId = saleAgent?.id ?? null;
+    const deliveryId = randomUUID();
 
     // Create delivery
     await db.insert(deliveries).values({
       id: deliveryId,
       truck_id,
-      driver_id: driver_id ?? null,
+      driver_id: driver_id ?? truck.driver_id ?? null,
       agent_id: resolvedAgentId,
       scheduled_date: scheduled_date ?? todayIsoDate(),
       status: "pending",
@@ -257,62 +271,18 @@ export const updateDeliveryItemStatus: RequestHandler = async (
   }
 };
 
-// ─── DELETE /api/deliveries/:id ───────────────────────────────────────────────
-// Releases (removes) a completed delivery. Only completed deliveries can be
-// released — active/in-transit ones are blocked to prevent data loss.
-
-export const releaseDelivery: RequestHandler = async (
-  req: AuthRequest,
-  res
-) => {
-  const { id } = req.params;
-  try {
-    const existing = await db.query.deliveries.findFirst({
-      where: eq(deliveries.id, id),
-      with: { delivery_items: true },
-    });
-
-    if (!existing) {
-      return res.status(404).json({ error: "Delivery not found" });
-    }
-
-    if (existing.status !== "completed") {
-      return res
-        .status(400)
-        .json({ error: "Only completed deliveries can be released" });
-    }
-
-    await db.delete(deliveries).where(eq(deliveries.id, id));
-
-    if (req.user) {
-      await logAction(
-        req.user.userId,
-        "delete",
-        "delivery",
-        id,
-        existing,
-        undefined
-      );
-    }
-
-    res.json({ message: "Delivery released" });
-  } catch (error) {
-    console.error("Error releasing delivery:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-};
-
 // ─── PATCH /api/deliveries/:id/assign ────────────────────────────────────────
-// Update the driver and/or agent on an existing delivery.
-// Agents can only update deliveries that belong to them (agent_id matches
-// their own agent profile). Admins can assign freely.
+// Update the driver on an existing delivery. Agent assignment is derived from the sale owner.
 
 export const assignDelivery: RequestHandler = async (
   req: AuthRequest,
   res
 ) => {
   const { id } = req.params;
-  const { driver_id, agent_id } = req.body;
+  const { driver_id } = req.body;
+  if (req.body.agent_id !== undefined) {
+    return res.status(400).json({ error: "Agent assignment is derived from the sale owner" });
+  }
 
   try {
     const existing = await db.query.deliveries.findFirst({
@@ -331,17 +301,12 @@ export const assignDelivery: RequestHandler = async (
       if (!agentProfile || (existing as any).agent_id !== agentProfile.id) {
         return res.status(403).json({ error: "You can only modify your own deliveries" });
       }
-      // Agents cannot reassign agent_id away from themselves
-      if (agent_id !== undefined && agent_id !== agentProfile.id) {
-        return res.status(403).json({ error: "Agents cannot change the assigned agent" });
-      }
     }
 
     await db
       .update(deliveries)
       .set({
         ...(driver_id !== undefined ? { driver_id: driver_id || null } : {}),
-        ...(agent_id  !== undefined ? { agent_id:  agent_id  || null } : {}),
         updated_at: new Date(),
       })
       .where(eq(deliveries.id, id));

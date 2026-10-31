@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pallet, Booking, Customer, Product, Truck, Invoice, Delivery, DeliveryItem, formatCustomerAddress } from "@shared/api";
@@ -77,7 +78,8 @@ export function BookingInventory() {
         const errorData = await res.json();
         throw new Error(errorData.error || "Failed to update pallet status");
       }
-      const updated: Pallet = await res.json();
+      const updated: Pallet & { invoice_pending_reason?: string } = await res.json();
+      if (updated.invoice_pending_reason) alert(updated.invoice_pending_reason);
       setPallets((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to update pallet status");
@@ -148,7 +150,7 @@ export function BookingInventory() {
 
   const selected = entries.find((entry) => entry.pallet.id === selectedPalletId) ?? null;
 
-  if (isLoading) return <div className="p-6 text-gray-500">Loading pallets…</div>;
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div className="flex-1 flex flex-col gap-6 p-6">

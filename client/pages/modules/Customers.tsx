@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Customer, Truck, formatCustomerAddress, totalDiscountRate } from "@shared/api";
-import { RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
+import { ExcelImportDialog } from "@/components/ExcelImportDialog";
+import { ExcelColumn, exportExcelFile } from "@/lib/excel";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { ActionButtons } from "@/components/ActionButtons";
 import {
@@ -9,6 +12,7 @@ import {
   DiscountRow,
   formatPercent,
 } from "@/components/CustomerDiscountEditor";
+import { CustomerLocationPicker } from "@/components/CustomerLocationPicker";
 
 interface CustomersProps {
   onBack?: () => void;
@@ -22,12 +26,32 @@ interface CustomerForm {
   district: string;
   state: string;
   postal_code: string;
+  latitude: number | null;
+  longitude: number | null;
   contact_person: string;
   contact_info: string;
   credit_limit: string;
   credit_terms_days: string;
   discounts: DiscountRow[];
 }
+
+const customerExcelColumns: ExcelColumn[] = [
+  { header: "Store Name", key: "store_name", required: true, width: 28 },
+  { header: "City", key: "location", required: true, width: 20 },
+  { header: "Street No.", key: "street_number", width: 14 },
+  { header: "Street Address", key: "street_address", width: 30 },
+  { header: "Truck District", key: "district", width: 20 },
+  { header: "State / Province", key: "state", width: 22 },
+  { header: "Postal Code", key: "postal_code", width: 14 },
+  { header: "Latitude", key: "latitude", width: 14 },
+  { header: "Longitude", key: "longitude", width: 14 },
+  { header: "Contact Person", key: "contact_person", width: 22 },
+  { header: "Contact Info", key: "contact_info", width: 22 },
+  { header: "Payment Type", key: "payment_type", width: 16 },
+  { header: "Credit Limit", key: "credit_limit", width: 14 },
+  { header: "Credit Terms Days", key: "credit_terms_days", width: 18 },
+  { header: "Discounts JSON", key: "discounts_json", width: 42 },
+];
 
 function StatsBox({
   label,
@@ -129,9 +153,11 @@ function CustomerModal({
     formData.district && !districts.includes(formData.district)
       ? [...districts, formData.district]
       : districts;
+  const updateAddressField = (field: "street_number" | "street_address" | "location" | "state" | "postal_code", value: string) =>
+    setFormData({ ...formData, [field]: value, latitude: null, longitude: null });
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-white">
+      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-white">
         <div className="sticky top-0 flex items-center justify-between rounded-t-2xl border-b border-border bg-navy-mid px-6 py-4">
           <h2 className="font-rajdhani text-lg font-bold text-white">{title}</h2>
           <button onClick={onClose} className="text-2xl text-white hover:opacity-70">
@@ -139,7 +165,7 @@ function CustomerModal({
           </button>
         </div>
 
-        <div className="space-y-4 p-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
           <div>
             <label className="mb-1 block text-xs font-semibold text-navy">
               Store Name *
@@ -155,13 +181,18 @@ function CustomerModal({
             />
           </div>
 
+          <CustomerLocationPicker
+            position={{ latitude: formData.latitude, longitude: formData.longitude }}
+            onSelect={(details) => setFormData({ ...formData, ...details })}
+          />
+
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="mb-1 block text-xs font-semibold text-navy">Street No.</label>
               <input
                 type="text"
                 value={formData.street_number}
-                onChange={(e) => setFormData({ ...formData, street_number: e.target.value })}
+                onChange={(e) => updateAddressField("street_number", e.target.value)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent-2 focus:outline-none"
                 placeholder="e.g., 123"
               />
@@ -171,7 +202,7 @@ function CustomerModal({
               <input
                 type="text"
                 value={formData.street_address}
-                onChange={(e) => setFormData({ ...formData, street_address: e.target.value })}
+                onChange={(e) => updateAddressField("street_address", e.target.value)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent-2 focus:outline-none"
                 placeholder="e.g., Ayala Avenue"
               />
@@ -184,7 +215,7 @@ function CustomerModal({
               <input
                 type="text"
                 value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                onChange={(e) => updateAddressField("location", e.target.value)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent-2 focus:outline-none"
                 placeholder="e.g., Makati City"
               />
@@ -194,7 +225,7 @@ function CustomerModal({
               <input
                 type="text"
                 value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                onChange={(e) => updateAddressField("state", e.target.value)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent-2 focus:outline-none"
                 placeholder="e.g., Metro Manila"
               />
@@ -204,7 +235,7 @@ function CustomerModal({
               <input
                 type="text"
                 value={formData.postal_code}
-                onChange={(e) => setFormData({ ...formData, postal_code: e.target.value })}
+                onChange={(e) => updateAddressField("postal_code", e.target.value)}
                 className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-accent-2 focus:outline-none"
                 placeholder="e.g., 1226"
               />
@@ -321,6 +352,7 @@ export function Customers({ onBack }: CustomersProps) {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [showDeleteButtons, setShowDeleteButtons] = useState(false);
   const [viewingCustomer, setViewingCustomer] = useState<Customer | null>(null);
+  const [showExcelImport, setShowExcelImport] = useState(false);
   const [truckDistricts, setTruckDistricts] = useState<string[]>([]);
   const [formData, setFormData] = useState<CustomerForm>({
     store_name: "",
@@ -330,6 +362,8 @@ export function Customers({ onBack }: CustomersProps) {
     district: "",
     state: "",
     postal_code: "",
+    latitude: null,
+    longitude: null,
     contact_person: "",
     contact_info: "",
     credit_limit: "",
@@ -361,6 +395,48 @@ export function Customers({ onBack }: CustomersProps) {
     setIsRefreshing(true);
     await fetchCustomers();
     setIsRefreshing(false);
+  };
+
+  const validateCustomerImportRow = (row: Record<string, unknown>) => {
+    const storeName = String(row.store_name ?? "").trim();
+    const location = String(row.location ?? "").trim();
+    const errors = [];
+    if (!storeName || !location) errors.push("Store name and city are required");
+    if (customers.some((customer) => customer.store_name.toLowerCase() === storeName.toLowerCase() && customer.location.toLowerCase() === location.toLowerCase())) {
+      errors.push("Store and city already exist");
+    }
+    return errors;
+  };
+
+  const importCustomerRows = async (rows: Record<string, unknown>[]) => {
+    const response = await fetch("/api/customers/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ rows }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Customer import failed.");
+    await fetchCustomers();
+  };
+
+  const handleCustomerExport = async () => {
+    await exportExcelFile("customers.xlsx", "Customers", customerExcelColumns, customers.map((customer) => ({
+      store_name: customer.store_name,
+      location: customer.location,
+      street_number: customer.street_number ?? "",
+      street_address: customer.street_address ?? "",
+      district: customer.district ?? "",
+      state: customer.state ?? "",
+      postal_code: customer.postal_code ?? "",
+      latitude: customer.latitude ?? "",
+      longitude: customer.longitude ?? "",
+      contact_person: customer.contact_person ?? "",
+      contact_info: customer.contact_info ?? "",
+      payment_type: customer.payment_type ?? "",
+      credit_limit: customer.credit_limit ? Number(customer.credit_limit) : "",
+      credit_terms_days: customer.credit_terms_days ?? 30,
+      discounts_json: JSON.stringify((customer.discounts ?? []).map(({ label, rate }) => ({ label, rate: Number(rate) }))),
+    })));
   };
 
   useEffect(() => {
@@ -406,7 +482,9 @@ export function Customers({ onBack }: CustomersProps) {
       district: "",
       state: "",
       postal_code: "",
-      contact_person: "",
+    latitude: null,
+    longitude: null,
+    contact_person: "",
       contact_info: "",
       credit_limit: "",
       credit_terms_days: "30",
@@ -425,6 +503,8 @@ export function Customers({ onBack }: CustomersProps) {
       district: customer.district ?? "",
       state: customer.state ?? "",
       postal_code: customer.postal_code ?? "",
+      latitude: customer.latitude ?? null,
+      longitude: customer.longitude ?? null,
       contact_person: customer.contact_person ?? "",
       contact_info: customer.contact_info ?? "",
       credit_limit: customer.credit_limit ?? "",
@@ -467,6 +547,8 @@ export function Customers({ onBack }: CustomersProps) {
           district: formData.district || undefined,
           state: formData.state || undefined,
           postal_code: formData.postal_code || undefined,
+          latitude: formData.latitude,
+          longitude: formData.longitude,
           contact_person: formData.contact_person || undefined,
           contact_info: formData.contact_info || undefined,
           credit_limit: formData.credit_limit.trim() === "" ? null : Number(formData.credit_limit),
@@ -508,7 +590,7 @@ export function Customers({ onBack }: CustomersProps) {
   if (isLoading) {
     return (
       <div className="flex-1 px-4 py-4 md:px-6 md:py-6">
-        <div className="text-sm text-muted">Loading customers...</div>
+        <LoadingSpinner className="min-h-64" />
       </div>
     );
   }
@@ -535,11 +617,11 @@ export function Customers({ onBack }: CustomersProps) {
             <RefreshCw size={16} className={isRefreshing ? "animate-spin" : ""} />
             Refresh
           </button>
-          <button className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-off-white">
+          <button onClick={() => setShowExcelImport(true)} className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-off-white">
             ⬇ Import Excel
           </button>
-          <button className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-off-white">
-            ⬆ Export Excel
+          <button onClick={() => void handleCustomerExport()} className="rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-off-white">
+            <Download size={15} className="mr-1 inline" />Export Excel
           </button>
         </div>
       </div>
@@ -698,6 +780,16 @@ export function Customers({ onBack }: CustomersProps) {
       <div className="text-xs text-muted">
         Total customers: {filteredCustomers.length}
       </div>
+
+      {showExcelImport && (
+        <ExcelImportDialog
+          title="Customers"
+          columns={customerExcelColumns}
+          validateRow={validateCustomerImportRow}
+          onImport={importCustomerRows}
+          onClose={() => setShowExcelImport(false)}
+        />
+      )}
 
       {viewingCustomer && (
         <ViewCustomerModal customer={viewingCustomer} onClose={() => setViewingCustomer(null)} />

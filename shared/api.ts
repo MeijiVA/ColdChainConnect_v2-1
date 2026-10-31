@@ -64,6 +64,7 @@ export interface User {
   mfa_enabled: boolean;
   created_at: string;
   updated_at: string;
+  agent?: Pick<Agent, "full_name"> | null;
 }
 
 // Customer types
@@ -82,6 +83,8 @@ export interface Customer {
   street_address?: string | null;
   state?: string | null;
   postal_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   contact_person?: string;
   contact_info?: string;
   agent_id?: string;
@@ -125,10 +128,14 @@ export const CreateCustomerSchema = z.object({
   street_address: z.string().optional(),
   state: z.string().optional(),
   postal_code: z.string().optional(),
+  latitude: z.number().finite().nullable().optional(),
+  longitude: z.number().finite().nullable().optional(),
   contact_person: z.string().optional(),
   contact_info: z.string().optional(),
   agent_id: z.string().optional(),
   payment_type: z.enum(["cash", "check", "bank_transfer", "cod", "credit"]).optional(),
+  credit_limit: z.number().nonnegative().nullable().optional(),
+  credit_terms_days: z.number().int().min(1).max(365).optional(),
   discounts: z
     .array(z.object({ label: z.string().min(1), rate: z.number().gt(0).max(1) }))
     .refine((list) => list.reduce((sum, d) => sum + d.rate, 0) <= 1 + 1e-9, {
@@ -163,6 +170,9 @@ export const CreateProductSchema = z.object({
   }, "Price must be a positive number"),
   image_filename: z.string().optional(),
   batch_tracking_enabled: z.boolean().default(true),
+  reorder_point: z.number().int().nonnegative().optional(),
+  manufacturer: z.string().optional(),
+  is_discontinued: z.boolean().optional(),
 });
 
 export const UpdateProductSchema = CreateProductSchema.partial();
@@ -205,6 +215,7 @@ export interface InventoryBatchItem {
   batch_id: string;
   product_id: string;
   qty_units: number;
+  available_units?: number;
   unit_cost: string;
   created_at: string;
   updated_at: string;
@@ -247,11 +258,13 @@ export interface PalletItem {
 
 export const CreatePalletSchema = z.object({
   order_id: z.string().min(1, "Order ID is required"),
-  items: z.array(z.object({
-    product_id: z.string().min(1, "Product ID is required"),
-    qty_units: z.number().int().positive("Quantity must be positive"),
-    batch_item_id: z.string().min(1, "Batch item ID is required"),
-  })).min(1, "At least one item is required"),
+  pallets: z.array(z.object({
+    items: z.array(z.object({
+      product_id: z.string().min(1, "Product ID is required"),
+      qty_units: z.number().int().positive("Quantity must be positive"),
+      batch_item_id: z.string().min(1, "Batch item ID is required"),
+    })).min(1, "Each pallet needs at least one item"),
+  })).min(1, "At least one pallet is required"),
 });
 
 export const UpdatePalletStatusSchema = z.object({
@@ -324,6 +337,8 @@ export interface DriverScheduleStop {
     store_name: string;
     location: string;
     street_address: string | null;
+    latitude: number | null;
+    longitude: number | null;
     contact_person: string | null;
     contact_info: string | null;
   };
@@ -484,6 +499,24 @@ export interface DeliveryItem {
   updated_at: string;
 }
 
+export interface AgentScheduleStop extends DeliveryItem {
+  destination_customer: Customer;
+  invoice: Pick<Invoice, "id" | "booking_id" | "receipt_number" | "total_amount"> | null;
+  sale_agent: Pick<User, "id" | "username"> | null;
+  pallets: Pick<Pallet, "id" | "order_id" | "status">[];
+}
+
+export type AgentScheduleDelivery = Omit<Delivery, "agent" | "driver"> & {
+  truck: Pick<Truck, "id" | "license_plate" | "district">;
+  agent: Pick<Agent, "id" | "full_name"> | null;
+  driver: Pick<Driver, "id" | "full_name" | "contact_info" | "license"> | null;
+  delivery_items: AgentScheduleStop[];
+};
+
+export interface AgentScheduleResponse {
+  deliveries: AgentScheduleDelivery[];
+}
+
 export const CreateDeliveryItemSchema = z.object({
   invoice_id: z.string().min(1, "Invoice ID is required"),
   destination_customer_id: z.string().min(1, "Destination customer ID is required"),
@@ -493,7 +526,6 @@ export const CreateDeliverySchema = z.object({
   truck_id: z.string().min(1, "Truck ID is required"),
   items: z.array(CreateDeliveryItemSchema).min(1, "At least one delivery item is required"),
   driver_id: z.string().optional().nullable(),
-  agent_id: z.string().optional().nullable(),
 });
 
 export const UpdateDeliveryStatusSchema = z.object({

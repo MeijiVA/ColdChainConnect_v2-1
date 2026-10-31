@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ChevronDown, ChevronUp, Package, RefreshCw, Search } from "lucide-react";
 import { Booking, Pallet, Product } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
@@ -122,6 +123,7 @@ export function AgentPalletTracking() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not update pallet status.");
 
+      if (data.invoice_pending_reason) setError(data.invoice_pending_reason);
       setPallets((current) => current.map((item) =>
         item.id === pallet.id ? { ...data, order: item.order } : item,
       ));
@@ -132,7 +134,7 @@ export function AgentPalletTracking() {
     }
   };
 
-  if (isLoading) return <div className="p-5 text-sm text-muted">Loading pallet tracking…</div>;
+  if (isLoading) return <LoadingSpinner className="fixed inset-0 z-0 min-h-0 bg-off-white" slow />;
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col gap-4 px-0 pb-24 pt-5 sm:px-4">
