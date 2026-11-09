@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../hooks/useAuth";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { localScheduleDate } from "@/lib/agentSchedule";
 import { RefreshCw, ChevronLeft, Truck as TruckIcon, ChevronDown, ChevronUp } from "lucide-react";
 import { Delivery, DeliveryItem, Truck, Invoice, Customer, Driver, Agent, formatCustomerAddress } from "@shared/api";
 
@@ -37,6 +38,12 @@ function statusBadgeClass(status: string) {
 function statusLabel(status: string) {
   return status === "in_transit" ? "In Transit" :
          status === "completed"  ? "Completed"  : "Pending";
+}
+
+function formatRunDate(delivery: Delivery) {
+  if (!delivery.scheduled_date) return new Date(delivery.created_at).toLocaleDateString("en-PH");
+  const [year, month, day] = delivery.scheduled_date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-PH");
 }
 
 function truckStatusLabel(status: string) {
@@ -217,6 +224,37 @@ export function DeliveryDispatch() {
     }
   };
 
+  const handleStartRun = async (deliveryId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/deliveries/${deliveryId}/status`, {
+        method: "PATCH",
+        headers: authHeaders(token),
+        body: JSON.stringify({ status: "in_transit" }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start this run.");
+    }
+  };
+
+  const handleRemoveStop = async (delivery: DeliveryExt, item: DeliveryItemExt) => {
+    if (!token) return;
+    const name = item.customer?.store_name ?? "this stop";
+    if (!window.confirm(`Remove ${name} from this run? The order will go back to the unassigned list.`)) return;
+    try {
+      const res = await fetch(`/api/deliveries/${delivery.id}/items/${item.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchAll();
+    } catch (err) {
+      alert("Failed to remove stop: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
   const assignedInvoiceIds = new Set(
     deliveries
       .filter((d) => d.status !== "completed")
@@ -348,7 +386,7 @@ export function DeliveryDispatch() {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                 <span className="text-xs text-muted hidden sm:block">
-                  {new Date(delivery.created_at).toLocaleDateString("en-PH")}
+                  {formatRunDate(delivery)}
                 </span>
                 {selectedDelivery?.id === delivery.id
                   ? <ChevronUp size={14} className="text-muted" />
@@ -376,6 +414,15 @@ export function DeliveryDispatch() {
                   ))}
                 </select>
               </label>
+              {delivery.status === "pending" && (
+                <button
+                  type="button"
+                  onClick={() => void handleStartRun(delivery.id)}
+                  className="ml-auto px-3 py-1 bg-navy text-white rounded text-xs font-semibold hover:opacity-90"
+                >
+                  Start run
+                </button>
+              )}
             </div>
 
             {/* Delivery stops — card layout on mobile, table on md+ */}
@@ -421,13 +468,24 @@ export function DeliveryDispatch() {
                           {item.status === "completed" ? (
                             <span className="text-xs text-green font-semibold">✅ Done</span>
                           ) : (
-                            <button
-                              disabled={confirmingItem === item.id}
-                              onClick={() => handleConfirm(delivery, item)}
-                              className="w-full mt-1 px-3 py-2 bg-green text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
-                            >
-                              {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
-                            </button>
+                            <>
+                              <button
+                                disabled={confirmingItem === item.id}
+                                onClick={() => handleConfirm(delivery, item)}
+                                className="w-full mt-1 px-3 py-2 bg-green text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                              >
+                                {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
+                              </button>
+                              {item.status === "pending" && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveStop(delivery, item)}
+                                  className="w-full px-3 py-2 border border-red/40 text-red rounded-lg text-xs font-semibold hover:bg-red/10"
+                                >
+                                  Remove from run
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       ))}
@@ -482,13 +540,24 @@ export function DeliveryDispatch() {
                                 {item.status === "completed" ? (
                                   <span className="text-xs text-green font-semibold">✅ Done</span>
                                 ) : (
-                                  <button
-                                    disabled={confirmingItem === item.id}
-                                    onClick={() => handleConfirm(delivery, item)}
-                                    className="px-3 py-1 bg-green text-white rounded text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
-                                  >
-                                    {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      disabled={confirmingItem === item.id}
+                                      onClick={() => handleConfirm(delivery, item)}
+                                      className="px-3 py-1 bg-green text-white rounded text-xs font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
+                                    >
+                                      {confirmingItem === item.id ? "Confirming…" : "✓ Confirm Delivery"}
+                                    </button>
+                                    {item.status === "pending" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleRemoveStop(delivery, item)}
+                                        className="px-2 py-1 text-red text-xs font-semibold hover:opacity-70"
+                                      >
+                                        Remove
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </td>
                             </tr>
@@ -913,6 +982,8 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers,
   onSave: (d: { invoice_id: string; destination_customer_id: string }[], driverId: string, scheduledDate: string) => Promise<void>;
 }) {
   const [stops, setStops] = useState([{ invoice_id: "" }]);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderDate, setOrderDate] = useState("");
   const [selectedDriverId, setSelectedDriverId] = useState(truck.driver_id ?? "");
   const [scheduledDate, setScheduledDate] = useState(() => {
     const today = new Date();
@@ -968,6 +1039,33 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers,
   // Already-picked invoice ids (to prevent duplicates within modal)
   const pickedIds = new Set(stops.map((s) => s.invoice_id).filter(Boolean));
 
+  const normalizedOrderSearch = orderSearch.trim().toLowerCase();
+  const orderSearchText = (inv: Invoice) => {
+    const customer = customerFor(inv);
+    return [
+      inv.customer_name,
+      customer?.store_name,
+      customer?.contact_person,
+      customer && formatCustomerAddress(customer),
+      inv.customer_address,
+      inv.receipt_number,
+    ].filter(Boolean).join(" ").toLowerCase();
+  };
+  const orderDateOf = (inv: Invoice) => localScheduleDate(new Date(inv.created_at));
+  const pickerInvoices = districtInvoices.filter((inv) =>
+    (!orderDate || orderDateOf(inv) === orderDate) &&
+    (!normalizedOrderSearch || normalizedOrderSearch.split(/\s+/).every((term) => orderSearchText(inv).includes(term)))
+  );
+  const todayDate = localScheduleDate(new Date());
+  const todaysOrders = districtInvoices.filter((inv) => orderDateOf(inv) === todayDate && !pickedIds.has(inv.id));
+  const todayAgentId = saleOwnerId ?? todaysOrders[0]?.agent_id;
+  const todaysOrdersForRun = todaysOrders.filter((inv) => inv.agent_id === todayAgentId);
+  const otherAgentTodayCount = todaysOrders.length - todaysOrdersForRun.length;
+  const addTodaysOrders = () => setStops((current) => [
+    ...current.filter((stop) => stop.invoice_id),
+    ...todaysOrdersForRun.map((inv) => ({ invoice_id: inv.id })),
+  ]);
+
   const handleSave = async () => {
     if (!valid || !scheduledDate) { alert("Choose a scheduled date and valid order stops."); return; }
     setSaving(true);
@@ -1008,6 +1106,42 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers,
           </select>
         </div>
 
+        <div className="rounded-lg border border-border bg-white p-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={orderSearch}
+              onChange={(event) => setOrderSearch(event.target.value)}
+              aria-label="Search orders"
+              placeholder="Search store, contact, address, receipt"
+              className="min-w-0 flex-1 rounded-lg border border-border px-3 py-2 text-xs text-navy focus:outline-none focus:border-accent-2"
+            />
+            <input
+              type="date"
+              value={orderDate}
+              onChange={(event) => setOrderDate(event.target.value)}
+              aria-label="Filter orders by date"
+              className="rounded-lg border border-border px-3 py-2 text-xs text-navy focus:outline-none focus:border-accent-2"
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span>Showing {pickerInvoices.length} of {districtInvoices.length} orders</span>
+            {(orderSearch || orderDate) && (
+              <button onClick={() => { setOrderSearch(""); setOrderDate(""); }} className="font-semibold text-accent-2 hover:opacity-80">Clear</button>
+            )}
+          </div>
+          <button
+            onClick={addTodaysOrders}
+            disabled={todaysOrdersForRun.length === 0}
+            className="w-full px-3 py-2 bg-navy text-white rounded-lg text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            Add all of today's orders ({todaysOrdersForRun.length})
+          </button>
+          {otherAgentTodayCount > 0 && (
+            <p className="text-xs text-muted">{otherAgentTodayCount} more of today's orders belong to other agents and need a separate run.</p>
+          )}
+        </div>
+
         <div className="flex items-center justify-between">
           <label className="text-xs font-semibold text-navy">Delivery Stops *</label>
           <button onClick={addStop} className="text-xs text-accent-2 font-semibold hover:opacity-80">+ Add Stop</button>
@@ -1015,6 +1149,7 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers,
         {stops.map((stop, i) => {
           const selectedInv = districtInvoices.find((inv) => inv.id === stop.invoice_id);
           const resolvedCustomer = selectedInv ? customerFor(selectedInv) : null;
+          const stopOptions = selectedInv && !pickerInvoices.includes(selectedInv) ? [selectedInv, ...pickerInvoices] : pickerInvoices;
           return (
             <div key={i} className="bg-off-white rounded-lg p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -1032,7 +1167,7 @@ function AddDeliveryModal({ truck, eligibleInvoices, customers, agents, drivers,
                   className="w-full px-3 py-2 border border-border rounded-lg text-xs focus:outline-none focus:border-accent-2 bg-white"
                 >
                   <option value="">Select order…</option>
-                  {districtInvoices.map((inv) => {
+                  {stopOptions.map((inv) => {
                     const disabled = pickedIds.has(inv.id) && inv.id !== stop.invoice_id;
                     return (
                       <option key={inv.id} value={inv.id} disabled={disabled}>

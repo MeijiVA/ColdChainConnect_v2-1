@@ -3,12 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { RefreshCw, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Pallet, Booking, Customer, Product, Truck, Invoice, Delivery, DeliveryItem, formatCustomerAddress } from "@shared/api";
+import { Pallet, Booking, Customer, Product, Truck, Invoice, Delivery, DeliveryItem, InventoryBatch, formatCustomerAddress } from "@shared/api";
 import { useAuth } from "../../hooks/useAuth";
 import { PalletStats } from "@/components/pallets/PalletStats";
 import { PalletToolbar, PalletStatusFilter } from "@/components/pallets/PalletToolbar";
 import { PalletTable, PalletEntry } from "@/components/pallets/PalletTable";
 import { PalletDetail } from "@/components/pallets/PalletDetail";
+import { DeliverySheet } from "@/components/pallets/DeliverySheet";
 import { DatePresetFilter, isInDatePreset } from "@/components/pallets/palletUtils";
 
 type DeliveryWithItems = Delivery & { delivery_items?: DeliveryItem[] };
@@ -22,6 +23,8 @@ export function BookingInventory() {
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryWithItems[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [batches, setBatches] = useState<InventoryBatch[]>([]);
+  const [sheetOrder, setSheetOrder] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState(searchParams.get("order") ?? "");
   const [selectedPalletId, setSelectedPalletId] = useState<string | null>(null);
@@ -29,11 +32,13 @@ export function BookingInventory() {
   const [truckFilter, setTruckFilter] = useState("all");
   const [datePreset, setDatePreset] = useState<DatePresetFilter>("all");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { token } = useAuth();
 
   const fetchAll = async () => {
     try {
-      const [pRes, bRes, cRes, prRes, tRes, dRes, iRes] = await Promise.all([
+      const [batchRes, pRes, bRes, cRes, prRes, tRes, dRes, iRes] = await Promise.all([
+        fetch("/api/inventory-batches", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/pallets", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/bookings", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/customers", { headers: { Authorization: `Bearer ${token}` } }),
@@ -43,6 +48,14 @@ export function BookingInventory() {
         fetch("/api/invoices", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
 
+      const failedCount = [batchRes, pRes, bRes, cRes, prRes, tRes, dRes, iRes].filter((res) => !res.ok).length;
+      setLoadError(
+        failedCount > 0
+          ? `${failedCount} of 8 data sources failed to load, so some pallet details may be missing.`
+          : null
+      );
+
+      if (batchRes.ok) setBatches(await batchRes.json());
       if (pRes.ok) setPallets(await pRes.json());
       if (bRes.ok) setBookings(await bRes.json());
       if (cRes.ok) setCustomers(await cRes.json());
@@ -52,6 +65,7 @@ export function BookingInventory() {
       if (iRes.ok) setInvoices(await iRes.json());
     } catch (err) {
       console.error("Error loading data:", err);
+      setLoadError("Could not load pallet tracking data. Try refreshing.");
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +107,7 @@ export function BookingInventory() {
 
   const entries: PalletEntry[] = pallets.map((pallet) => {
     const order = bookings.find((b) => b.id === pallet.order_id);
-    const customer = order ? customers.find((c) => c.id === order.customer_id) ?? null : null;
+    const customer = order ? order.customer ?? customers.find((c) => c.id === order.customer_id) ?? null : null;
     return { pallet, customer };
   });
 
@@ -126,7 +140,7 @@ export function BookingInventory() {
 
   const palletGroups: { truck: Truck | null; entries: PalletEntry[] }[] = [
     ...[...trucks]
-      .sort((a, b) => a.license_plate.localeCompare(b.license_plate))
+      .sort((a, b) => (a.license_plate ?? "").localeCompare(b.license_plate ?? ""))
       .map((truck) => ({
         truck,
         entries: filteredEntries.filter(({ pallet }) => truckIdFor(pallet) === truck.id),
@@ -137,7 +151,7 @@ export function BookingInventory() {
   const truckOptions = [
     { value: "all", label: "All trucks" },
     ...[...trucks]
-      .sort((a, b) => a.license_plate.localeCompare(b.license_plate))
+      .sort((a, b) => (a.license_plate ?? "").localeCompare(b.license_plate ?? ""))
       .map((truck) => ({ value: truck.id, label: `${truck.license_plate} · ${truck.district}` })),
     { value: "unassigned", label: "Unassigned" },
   ];
@@ -165,6 +179,10 @@ export function BookingInventory() {
         </Button>
       </div>
 
+      {loadError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{loadError}</div>
+      )}
+
       <PalletStats pallets={visiblePallets} />
 
       {selected ? (
@@ -174,6 +192,7 @@ export function BookingInventory() {
           customer={selected.customer}
           getProductName={getProductName}
           onStatusChange={(status) => handleStatusChange(selected.pallet.id, status)}
+          onPrintSheet={() => setSheetOrder(bookings.find((b) => b.id === selected.pallet.order_id) ?? null)}
           isUpdatingStatus={isUpdatingStatus}
           onBack={() => setSelectedPalletId(null)}
         />
@@ -224,6 +243,15 @@ export function BookingInventory() {
             </div>
           )}
         </>
+      )}
+
+      {sheetOrder && (
+        <DeliverySheet
+          order={sheetOrder}
+          pallets={pallets.filter((pallet) => pallet.order_id === sheetOrder.id)}
+          batches={batches}
+          onClose={() => setSheetOrder(null)}
+        />
       )}
     </div>
   );

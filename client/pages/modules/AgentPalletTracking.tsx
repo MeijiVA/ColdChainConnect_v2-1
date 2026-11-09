@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { ChevronDown, ChevronUp, Package, RefreshCw, Search } from "lucide-react";
 import { Booking, Pallet, Product } from "@shared/api";
@@ -18,6 +18,13 @@ const statusLabels: Record<Pallet["status"], string> = {
   shipped: "Shipped",
 };
 
+const nextActionLabels: Record<Pallet["status"], string | null> = {
+  draft: "Mark prepared",
+  prepared: "Mark ready",
+  approved: "Mark shipped",
+  shipped: null,
+};
+
 function statusClasses(status: Pallet["status"]) {
   if (status === "shipped") return "bg-green/10 text-green";
   if (status === "approved") return "bg-blue-50 text-accent-2";
@@ -28,6 +35,10 @@ function statusClasses(status: Pallet["status"]) {
 export function AgentPalletTracking() {
   const { token } = useAuth();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const scanCode = searchParams.get("order")?.trim() ?? "";
+  const handledScanKeyRef = useRef<string | null>(null);
+  const [scanPalletId, setScanPalletId] = useState<string | null>(null);
   const [pallets, setPallets] = useState<TrackingPallet[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState(searchParams.get("order") ?? "");
@@ -78,6 +89,24 @@ export function AgentPalletTracking() {
     void fetchTracking();
   }, [token]);
 
+  useEffect(() => {
+    if (isLoading || !scanCode || handledScanKeyRef.current === location.key) return;
+    handledScanKeyRef.current = location.key;
+    setSearch(scanCode);
+
+    const code = scanCode.toLowerCase();
+    const pallet = pallets.find((item) => item.id.toLowerCase() === code);
+    if (pallet) {
+      setScanPalletId(pallet.id);
+      return;
+    }
+    if (!pallets.some((item) => item.order_id.toLowerCase() === code)) {
+      setError("No pallet or order matches this barcode.");
+    }
+  }, [isLoading, location.key, pallets, scanCode]);
+
+  const scanPallet = pallets.find((pallet) => pallet.id === scanPalletId) ?? null;
+
   const filteredPallets = useMemo(() => {
     const query = search.trim().toLowerCase();
     return pallets.filter((pallet) => {
@@ -92,6 +121,9 @@ export function AgentPalletTracking() {
     });
   }, [filter, pallets, search]);
 
+  const productNameFor = (productId: string) =>
+    products.find((product) => product.id === productId)?.name ?? productId;
+
   const totalUnits = (pallet: Pallet) =>
     (pallet.items ?? []).reduce((sum, item) => sum + item.qty_units, 0);
 
@@ -100,9 +132,8 @@ export function AgentPalletTracking() {
     void fetchTracking();
   };
 
-  const handleAdvancePallet = async (pallet: TrackingPallet) => {
-    if (!token) return;
-    if (pallet.status === "approved" && !window.confirm("Mark this pallet as shipped?")) return;
+  const handleAdvancePallet = async (pallet: TrackingPallet): Promise<boolean> => {
+    if (!token) return false;
 
     setUpdatingPalletId(pallet.id);
     setError("");
@@ -127,11 +158,23 @@ export function AgentPalletTracking() {
       setPallets((current) => current.map((item) =>
         item.id === pallet.id ? { ...data, order: item.order } : item,
       ));
+      return true;
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Could not update pallet status.");
+      return false;
     } finally {
       setUpdatingPalletId(null);
     }
+  };
+
+  const confirmScannedPallet = async () => {
+    if (!scanPallet) return;
+    if (await handleAdvancePallet(scanPallet)) setScanPalletId(null);
+  };
+
+  const handleListAdvance = (pallet: TrackingPallet) => {
+    if (pallet.status === "approved" && !window.confirm("Mark this pallet as shipped?")) return;
+    void handleAdvancePallet(pallet);
   };
 
   if (isLoading) return <LoadingSpinner className="fixed inset-0 z-0 min-h-0 bg-off-white" slow />;
@@ -226,7 +269,12 @@ export function AgentPalletTracking() {
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-muted">Pallet {pallet.id.slice(0, 8)}</p>
                       <h2 className="mt-0.5 truncate font-semibold text-navy">{customer?.store_name ?? "Customer order"}</h2>
-                      <p className="mt-0.5 text-xs text-muted">Order {pallet.order_id.slice(0, 8)}</p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        Order {pallet.order_id.slice(0, 8)} · {new Date(pallet.created_at).toLocaleDateString()}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-navy">
+                        {items.map((item) => productNameFor(item.product_id)).join(", ") || "No items"}
+                      </p>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses(pallet.status)}`}>
                       {statusLabels[pallet.status]}
@@ -249,7 +297,7 @@ export function AgentPalletTracking() {
                       <ul className="divide-y divide-border">
                         {items.map((item) => (
                           <li key={item.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                            <span className="text-navy">{products.find((product) => product.id === item.product_id)?.name ?? item.product_id}</span>
+                            <span className="text-navy">{productNameFor(item.product_id)}</span>
                             <span className="shrink-0 font-semibold text-navy">× {item.qty_units}</span>
                           </li>
                         ))}
@@ -265,17 +313,11 @@ export function AgentPalletTracking() {
                   <div className="border-t border-border p-3">
                     <button
                       type="button"
-                      onClick={() => void handleAdvancePallet(pallet)}
+                      onClick={() => handleListAdvance(pallet)}
                       disabled={updatingPalletId !== null}
                       className="min-h-11 w-full rounded-xl bg-navy px-4 text-sm font-semibold text-white transition hover:bg-navy-mid active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
                     >
-                      {updatingPalletId === pallet.id
-                        ? "Updating…"
-                        : pallet.status === "draft"
-                          ? "Mark prepared"
-                          : pallet.status === "prepared"
-                            ? "Mark ready"
-                            : "Mark shipped"}
+                      {updatingPalletId === pallet.id ? "Updating…" : nextActionLabels[pallet.status]}
                     </button>
                   </div>
                 )}
@@ -284,6 +326,49 @@ export function AgentPalletTracking() {
           })}
         </div>
       )}
+
+      {scanPallet && (
+        <div role="dialog" aria-modal="true" aria-labelledby="scan-confirm-title" className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4 sm:items-center">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Scanned pallet</p>
+            <h2 id="scan-confirm-title" className="mt-1 truncate font-rajdhani text-xl font-bold text-navy">
+              {scanPallet.order?.customer?.store_name ?? "Customer order"}
+            </h2>
+            <p className="mt-0.5 text-xs text-muted">Pallet {scanPallet.id.slice(0, 8)} · Order {scanPallet.order_id.slice(0, 8)}</p>
+
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-off-white p-3 text-sm">
+              <span className="text-muted">Current status</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses(scanPallet.status)}`}>
+                {statusLabels[scanPallet.status]}
+              </span>
+            </div>
+
+            {error && <p role="alert" className="mt-3 rounded-xl border border-red/20 bg-red/5 p-3 text-sm text-red">{error}</p>}
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setScanPalletId(null)}
+                disabled={updatingPalletId !== null}
+                className="min-h-11 rounded-xl border border-border bg-white px-4 text-sm font-semibold text-navy disabled:opacity-60"
+              >
+                {nextActionLabels[scanPallet.status] ? "Cancel" : "Close"}
+              </button>
+              {nextActionLabels[scanPallet.status] && (
+                <button
+                  type="button"
+                  onClick={() => void confirmScannedPallet()}
+                  disabled={updatingPalletId !== null}
+                  className="min-h-11 rounded-xl bg-navy px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                >
+                  {updatingPalletId === scanPallet.id ? "Updating…" : nextActionLabels[scanPallet.status]}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
